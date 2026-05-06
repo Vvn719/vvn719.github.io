@@ -478,23 +478,40 @@
       if (options.bold) cell.font = { ...(cell.font || {}), bold: true };
     }
 
-    function writeSummaryRow(ws, rowNumber, label, people, recordsByClass) {
+    function attendanceCounts(people, record) {
+      const expected = people.filter(student => record.get(student.key)?.status !== 'excluded').length;
+      const actual = people.filter(student => ['present', 'online', 'late'].includes(record.get(student.key)?.status)).length;
+      return {
+        actual,
+        expected,
+        rate: expected ? `${Math.round((actual / expected) * 100)}%` : '0%'
+      };
+    }
+
+    function writeSummaryRow(ws, rowNumber, label, people, recordsByClass, options = {}) {
       const row = ws.getRow(rowNumber);
-      row.getCell(1).value = `${label}  ( 實到 / 應到 )`;
+      row.getCell(1).value = options.rawLabel ? label : `${label}  ( 實到 / 應到 )`;
       ws.mergeCells(rowNumber, 1, rowNumber, 5);
 
       classes.forEach((_, classIndex) => {
         const startCol = classStartColumn(classIndex);
-        const record = recordsByClass[classIndex];
-        const expected = people.filter(student => record.get(student.key)?.status !== 'excluded').length;
-        const actual = people.filter(student => ['present', 'online', 'late'].includes(record.get(student.key)?.status)).length;
+        const { actual, expected, rate } = attendanceCounts(people, recordsByClass[classIndex]);
         row.getCell(startCol).value = actual;
         row.getCell(startCol + 1).value = expected;
-        row.getCell(startCol + 2).value = expected ? `${Math.round((actual / expected) * 100)}%` : '0%';
+        row.getCell(startCol + 2).value = rate;
       });
 
-      for (let col = 1; col <= 5 + classes.length * 3; col += 1) styleCell(row.getCell(col), { fill: 'FFFFF2CC', bold: true });
+      for (let col = 1; col <= 5 + classes.length * 3; col += 1) styleCell(row.getCell(col), { fill: options.fill || 'FFFFF2CC', bold: true });
       row.height = 24;
+    }
+
+    function writeSectionRow(ws, rowNumber, label) {
+      ws.mergeCells(rowNumber, 1, rowNumber, 5 + classes.length * 3);
+      const cell = ws.getCell(rowNumber, 1);
+      cell.value = label;
+      cell.font = { bold: true, size: 13 };
+      styleCell(cell, { fill: 'FFD9EAD3', bold: true, horizontal: 'left' });
+      ws.getRow(rowNumber).height = 24;
     }
 
     function writePersonRow(ws, rowNumber, student, recordsByClass) {
@@ -580,9 +597,22 @@
 
         ['一組', '二組', '三組'].forEach(group => {
           const groupStudents = students.filter(student => student.group === group);
+          const guides = groupStudents.filter(student => student.role === '輔導');
+          const members = groupStudents.filter(student => student.role === '學員');
           groupStudents.forEach(student => writePersonRow(ws, rowNumber++, student, recordsByClass));
-          writeSummaryRow(ws, rowNumber++, group, groupStudents, recordsByClass);
+          writeSummaryRow(ws, rowNumber++, '輔導', guides, recordsByClass);
+          writeSummaryRow(ws, rowNumber++, '學員', members, recordsByClass);
+          writeSummaryRow(ws, rowNumber++, '該組當天總出席率', groupStudents, recordsByClass, { rawLabel: true, fill: 'FFD9EAD3' });
         });
+
+        rowNumber += 1;
+        writeSectionRow(ws, rowNumber++, '全班統計');
+        const allGuides = students.filter(student => student.role === '輔導');
+        const allMembers = students.filter(student => student.role === '學員');
+        const allClassMembers = [...allGuides, ...allMembers];
+        writeSummaryRow(ws, rowNumber++, '全輔導  ( 實到 / 應到 )、出席率', allGuides, recordsByClass, { rawLabel: true, fill: 'FFD9EAD3' });
+        writeSummaryRow(ws, rowNumber++, '全學員  ( 實到 / 應到 )、出席率', allMembers, recordsByClass, { rawLabel: true, fill: 'FFD9EAD3' });
+        writeSummaryRow(ws, rowNumber++, '總出席率', allClassMembers, recordsByClass, { rawLabel: true, fill: 'FFD9EAD3' });
 
         for (let col = 1; col <= 5 + classes.length * 3; col += 1) styleCell(ws.getCell(1, col));
 
