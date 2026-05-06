@@ -379,9 +379,10 @@
     }
 
     function updateSummary() {
-      const count = students.filter(isPresent).length;
-      document.getElementById('countBadge').textContent = `已出席 ${count} 人`;
-      document.getElementById('selectedSummary').textContent = count ? `準備送出 ${count} 人報到` : '尚未勾選';
+      const presentCount = students.filter(isPresent).length;
+      const pendingCount = students.filter(student => isPresent(student) && !confirmed.has(student.key)).length;
+      document.getElementById('countBadge').textContent = `已出席 ${presentCount} 人`;
+      document.getElementById('selectedSummary').textContent = pendingCount ? `準備送出 ${pendingCount} 人報到` : '尚未勾選';
     }
 
     function clearChecks() {
