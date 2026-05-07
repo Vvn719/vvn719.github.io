@@ -118,6 +118,8 @@ function doPost(e) {
     const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     const action = body.action || (e && e.parameter && e.parameter.action) || '';
     if (action === 'saveAttendance') return respond_(saveAttendance_(body.payload || {}));
+    if (action === 'importStudents') return respond_(importStudents_(body.payload || {}));
+    if (action === 'importClasses') return respond_(importClasses_(body.payload || {}));
     return respond_({ ok: false, error: 'Unknown action' });
   } catch (error) {
     return respond_({ ok: false, error: String(error && error.message ? error.message : error) });
@@ -159,6 +161,79 @@ function saveAttendance_(payload) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function importStudents_(payload) {
+  const semesterId = payload.semesterId || DEFAULT_SEMESTER_ID;
+  const rows = normalizeImportedStudents_(payload.rows || [], semesterId);
+  return replaceSemesterRows_(SHEETS.students, HEADERS.students, semesterId, rows);
+}
+
+function importClasses_(payload) {
+  const semesterId = payload.semesterId || DEFAULT_SEMESTER_ID;
+  const rows = normalizeImportedClasses_(payload.rows || [], semesterId);
+  return replaceSemesterRows_(SHEETS.classes, HEADERS.classes, semesterId, rows);
+}
+
+function normalizeImportedStudents_(rows, semesterId) {
+  return rows
+    .map((row, index) => ({
+      id: row.id || row.apiId || row.studentId || `student-${String(index + 1).padStart(3, '0')}`,
+      group: row.group || '',
+      role: row.role || '',
+      unit: row.unit || '',
+      name: row.name || '',
+      studentNo: row.studentNo || row.idNo || '',
+      url: row.url || '#',
+      active: row.active === undefined || row.active === '' ? true : row.active,
+      sortOrder: normalizeSortOrder_(row.sortOrder, index + 1),
+      semesterId: row.semesterId || semesterId
+    }))
+    .filter(row => row.group && row.role && row.name);
+}
+
+function normalizeImportedClasses_(rows, semesterId) {
+  return rows
+    .map((row, index) => ({
+      id: row.id || row.classId || `class-${index + 1}`,
+      semesterId: row.semesterId || semesterId,
+      date: row.date || '',
+      title: row.title || '',
+      sortOrder: normalizeSortOrder_(row.sortOrder, index + 1)
+    }))
+    .filter(row => row.date && row.title);
+}
+
+function normalizeSortOrder_(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function replaceSemesterRows_(sheetName, headers, semesterId, incomingRows) {
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+
+  try {
+    const existingOtherSemesters = readSheetObjects_(sheetName)
+      .filter(record => semesterIdForRecord_(record) !== semesterId);
+    const allRows = existingOtherSemesters.concat(incomingRows);
+    const sheet = getSpreadsheet_().getSheetByName(sheetName);
+    const lastRow = sheet.getLastRow();
+
+    if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, headers.length).clearContent();
+    if (allRows.length) {
+      sheet.getRange(2, 1, allRows.length, headers.length).setValues(objectsToValues_(allRows, headers));
+    }
+
+    SpreadsheetApp.flush();
+    return { ok: true, count: incomingRows.length, semesterId };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function semesterIdForRecord_(record) {
+  return record.semesterId || DEFAULT_SEMESTER_ID;
 }
 
 function getSpreadsheet_() {

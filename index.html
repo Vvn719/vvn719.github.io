@@ -23,6 +23,15 @@
     .sticky-actions { position: sticky; bottom: 0; z-index: 10; background: rgba(246,247,251,.96); backdrop-filter: blur(6px); }
     .quick-nav { position: fixed; right: .75rem; top: 45%; z-index: 20; display: flex; flex-direction: column; gap: .4rem; }
     .quick-nav .btn { width: 2.7rem; height: 2.7rem; border-radius: 999px; box-shadow: 0 .25rem .75rem rgba(0,0,0,.15); }
+    body.admin-modal-open { overflow: hidden; }
+    .admin-backdrop { position: fixed; inset: 0; z-index: 1050; display: none; align-items: center; justify-content: center; padding: 1rem; background: rgba(15, 23, 42, .5); }
+    .admin-backdrop.show { display: flex; }
+    .admin-dialog { width: min(980px, 100%); max-height: min(88vh, 820px); overflow: hidden; border-radius: .5rem; background: #fff; box-shadow: 0 1rem 3rem rgba(0,0,0,.22); }
+    .admin-body { max-height: calc(min(88vh, 820px) - 4.4rem); overflow: auto; }
+    .admin-tab-panel { display: none; }
+    .admin-tab-panel.active { display: block; }
+    .admin-preview-table { max-height: 22rem; overflow: auto; }
+    .admin-preview-table th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; }
     @media (max-width: 576px) {
       .student-id, .unit { font-size: .85rem; }
       .btn-wide { width: 100%; }
@@ -37,9 +46,10 @@
     <div class="container">
       <span class="navbar-brand fw-bold">34期培緣班報到</span>
       <span class="badge text-bg-primary" id="countBadge">已出席 0 人</span>
-      <div class="d-flex gap-2 ms-auto">
+      <div class="d-flex flex-wrap gap-2 ms-auto justify-content-end">
         <select class="form-select form-select-sm w-auto" id="semesterSelect" aria-label="選擇學期"></select>
         <span class="badge text-bg-light border text-dark align-self-center" id="syncBadge">本機資料</span>
+        <button class="btn btn-outline-dark btn-sm" type="button" onclick="openAdminModal()">管理</button>
         <button class="btn btn-outline-secondary btn-sm" type="button" onclick="configureApi()">設定 API</button>
         <button class="btn btn-outline-primary btn-sm" type="button" onclick="reloadFromApi()">同步</button>
       </div>
@@ -92,6 +102,56 @@
       </div>
     </div>
   </main>
+
+  <div class="admin-backdrop" id="adminModal" aria-hidden="true" onclick="handleAdminBackdrop(event)">
+    <div class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
+      <div class="d-flex align-items-center justify-content-between border-bottom px-3 py-2">
+        <h5 class="mb-0 fw-bold" id="adminTitle">管理模式</h5>
+        <button class="btn btn-sm btn-outline-secondary" type="button" onclick="closeAdminModal()" aria-label="關閉">關閉</button>
+      </div>
+      <div class="admin-body p-3">
+        <div class="btn-group w-100 mb-3" role="tablist" aria-label="管理功能">
+          <button class="btn btn-outline-primary active" id="adminTab-overview" type="button" onclick="setAdminTab('overview')">目前學期</button>
+          <button class="btn btn-outline-primary" id="adminTab-students" type="button" onclick="setAdminTab('students')">學生 CSV</button>
+          <button class="btn btn-outline-primary" id="adminTab-classes" type="button" onclick="setAdminTab('classes')">課程 CSV</button>
+        </div>
+
+        <div class="alert alert-light border py-2 mb-3" id="adminStatus">尚未執行管理操作</div>
+
+        <section class="admin-tab-panel active" id="adminPanel-overview">
+          <div id="adminOverview"></div>
+        </section>
+
+        <section class="admin-tab-panel" id="adminPanel-students">
+          <div class="row g-3 align-items-end">
+            <div class="col-12 col-lg-8">
+              <label class="form-label fw-bold" for="studentCsvInput">學生名單 CSV</label>
+              <input class="form-control" id="studentCsvInput" type="file" accept=".csv,text/csv" onchange="handleCsvFile('students', this)">
+            </div>
+            <div class="col-12 col-lg-4 d-grid">
+              <button class="btn btn-success" id="studentImportButton" type="button" onclick="confirmCsvImport('students')" disabled>確認匯入學生</button>
+            </div>
+          </div>
+          <div class="small text-muted mt-2">欄位：id, group, role, unit, name, studentNo, url, active, sortOrder, semesterId</div>
+          <div class="mt-3" id="studentImportPreview"></div>
+        </section>
+
+        <section class="admin-tab-panel" id="adminPanel-classes">
+          <div class="row g-3 align-items-end">
+            <div class="col-12 col-lg-8">
+              <label class="form-label fw-bold" for="classCsvInput">課程 CSV</label>
+              <input class="form-control" id="classCsvInput" type="file" accept=".csv,text/csv" onchange="handleCsvFile('classes', this)">
+            </div>
+            <div class="col-12 col-lg-4 d-grid">
+              <button class="btn btn-success" id="classImportButton" type="button" onclick="confirmCsvImport('classes')" disabled>確認匯入課程</button>
+            </div>
+          </div>
+          <div class="small text-muted mt-2">欄位：id, semesterId, date, title, sortOrder</div>
+          <div class="mt-3" id="classImportPreview"></div>
+        </section>
+      </div>
+    </div>
+  </div>
 
   <script>
     const DEFAULT_SEMESTERS = [
@@ -185,6 +245,10 @@
     const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbyuTmdc2cC_zqzP6AOiY5fn_qNduFjseDGs0KuY3m7R5ijQ9fFTred8vB-TmspdciHgDw/exec';
     let apiUrl = localStorage.getItem(API_URL_STORAGE_KEY) || DEFAULT_API_URL;
     let currentSemesterId = localStorage.getItem(SELECTED_SEMESTER_STORAGE_KEY) || DEFAULT_SEMESTERS[0].id;
+    const adminImportState = {
+      students: { rows: [], errors: [], fileName: '' },
+      classes: { rows: [], errors: [], fileName: '' }
+    };
 
     function assignStudentKeys() {
       currentStudents.forEach((student, index) => {
@@ -538,6 +602,7 @@
       } catch (error) {
         console.error(error);
         updateSyncBadge('同步失敗', 'danger');
+        if (options.throwOnError) throw error;
       }
     }
 
@@ -567,6 +632,374 @@
       } else {
         localStorage.removeItem(API_URL_STORAGE_KEY);
         updateSyncBadge('使用本機資料', 'secondary');
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function openAdminModal() {
+      renderAdminOverview();
+      setAdminTab('overview');
+      setAdminStatus('尚未執行管理操作', 'light');
+      document.getElementById('adminModal').classList.add('show');
+      document.getElementById('adminModal').setAttribute('aria-hidden', 'false');
+      document.body.classList.add('admin-modal-open');
+    }
+
+    function closeAdminModal() {
+      document.getElementById('adminModal').classList.remove('show');
+      document.getElementById('adminModal').setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('admin-modal-open');
+    }
+
+    function handleAdminBackdrop(event) {
+      if (event.target.id === 'adminModal') closeAdminModal();
+    }
+
+    function setAdminTab(tab) {
+      ['overview', 'students', 'classes'].forEach(item => {
+        document.getElementById(`adminTab-${item}`).classList.toggle('active', item === tab);
+        document.getElementById(`adminPanel-${item}`).classList.toggle('active', item === tab);
+      });
+      if (tab === 'overview') renderAdminOverview();
+    }
+
+    function setAdminStatus(text, style = 'light') {
+      const status = document.getElementById('adminStatus');
+      status.className = `alert alert-${style} border py-2 mb-3`;
+      status.textContent = text;
+    }
+
+    function countAttendanceRecords() {
+      let count = 0;
+      attendanceRecords.forEach(record => { count += record.size; });
+      return count;
+    }
+
+    function renderSimpleTable(rows, columns, emptyText = '尚無資料') {
+      if (!rows.length) return `<div class="alert alert-light border mb-0">${emptyText}</div>`;
+      return `
+        <div class="table-responsive admin-preview-table border rounded">
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead><tr>${columns.map(column => `<th>${escapeHtml(column.label)}</th>`).join('')}</tr></thead>
+            <tbody>${rows.map(row => `<tr>${columns.map(column => `<td>${escapeHtml(row[column.key])}</td>`).join('')}</tr>`).join('')}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function renderAdminOverview() {
+      const semester = currentSemester();
+      const groupRows = currentGroups().map(group => {
+        const people = currentStudents.filter(student => student.group === group);
+        return {
+          group,
+          total: people.length,
+          guides: people.filter(student => student.role === '輔導').length,
+          members: people.filter(student => student.role === '學員').length,
+          others: people.filter(student => !['輔導', '學員'].includes(student.role)).length
+        };
+      });
+      const studentRows = currentStudents.map(student => ({
+        group: student.group,
+        role: student.role,
+        unit: student.unit,
+        name: student.name,
+        id: student.id || student.apiId
+      }));
+      const classRows = currentClasses.map(item => ({
+        id: item.id,
+        date: item.date,
+        title: item.title,
+        sortOrder: item.sortOrder
+      }));
+
+      document.getElementById('adminOverview').innerHTML = `
+        <div class="row g-3 mb-3">
+          <div class="col-12 col-md-3"><div class="border rounded p-3 h-100"><div class="text-muted small">學期</div><div class="fw-bold">${escapeHtml(semester.name || semester.id)}</div><div class="small text-muted">${escapeHtml(semester.id)}</div></div></div>
+          <div class="col-4 col-md-3"><div class="border rounded p-3 h-100"><div class="text-muted small">課程</div><div class="h4 mb-0">${currentClasses.length}</div></div></div>
+          <div class="col-4 col-md-3"><div class="border rounded p-3 h-100"><div class="text-muted small">人員</div><div class="h4 mb-0">${currentStudents.length}</div></div></div>
+          <div class="col-4 col-md-3"><div class="border rounded p-3 h-100"><div class="text-muted small">紀錄</div><div class="h4 mb-0">${countAttendanceRecords()}</div></div></div>
+        </div>
+
+        <h6 class="fw-bold mt-3">課程</h6>
+        ${renderSimpleTable(classRows, [
+          { key: 'id', label: 'id' },
+          { key: 'date', label: '日期' },
+          { key: 'title', label: '課程' },
+          { key: 'sortOrder', label: '排序' }
+        ], '目前學期沒有課程')}
+
+        <h6 class="fw-bold mt-4">組別統計</h6>
+        ${renderSimpleTable(groupRows, [
+          { key: 'group', label: '組別' },
+          { key: 'total', label: '總數' },
+          { key: 'guides', label: '輔導' },
+          { key: 'members', label: '學員' },
+          { key: 'others', label: '其他' }
+        ], '目前學期沒有人員')}
+
+        <h6 class="fw-bold mt-4">學生名單</h6>
+        ${renderSimpleTable(studentRows, [
+          { key: 'group', label: '組別' },
+          { key: 'role', label: '角色' },
+          { key: 'unit', label: '單位' },
+          { key: 'name', label: '姓名' },
+          { key: 'id', label: 'id / 學號' }
+        ], '目前學期沒有學生')}
+      `;
+    }
+
+    function canonicalCsvHeader(value) {
+      return String(value || '').replace(/^\ufeff/, '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+    }
+
+    function normalizeClientSortOrder(value, fallback) {
+      const number = Number(value);
+      return Number.isFinite(number) && number > 0 ? number : fallback;
+    }
+
+    function csvAliases(type) {
+      if (type === 'classes') {
+        return {
+          id: ['id', 'classId', '課程id', '編號'],
+          semesterId: ['semesterId', '學期id', '學期'],
+          date: ['date', '日期', '上課日期'],
+          title: ['title', '課程', '課程名稱', '名稱'],
+          sortOrder: ['sortOrder', '排序', '順序']
+        };
+      }
+      return {
+        id: ['id', 'apiId', 'studentId', '學員id', '學生id', '編號'],
+        group: ['group', '組別', '組'],
+        role: ['role', '角色', '身分'],
+        unit: ['unit', '單位', '地方單位'],
+        name: ['name', '姓名', '名字'],
+        studentNo: ['studentNo', '學號'],
+        url: ['url', 'link', '連結', '報到連結'],
+        active: ['active', '啟用', '是否啟用'],
+        sortOrder: ['sortOrder', '排序', '順序'],
+        semesterId: ['semesterId', '學期id', '學期']
+      };
+    }
+
+    function parseCsv(text) {
+      const rows = [];
+      let row = [];
+      let field = '';
+      let inQuotes = false;
+      const source = String(text || '');
+
+      for (let index = 0; index < source.length; index += 1) {
+        const char = source[index];
+        if (inQuotes) {
+          if (char === '"') {
+            if (source[index + 1] === '"') {
+              field += '"';
+              index += 1;
+            } else {
+              inQuotes = false;
+            }
+          } else {
+            field += char;
+          }
+        } else if (char === '"') {
+          inQuotes = true;
+        } else if (char === ',') {
+          row.push(field);
+          field = '';
+        } else if (char === '\n') {
+          row.push(field);
+          rows.push(row);
+          row = [];
+          field = '';
+        } else if (char !== '\r') {
+          field += char;
+        }
+      }
+
+      row.push(field);
+      rows.push(row);
+      return rows.filter(item => item.some(cell => String(cell).trim() !== ''));
+    }
+
+    function mapCsvRows(type, text) {
+      const matrix = parseCsv(text);
+      const errors = [];
+      if (matrix.length < 2) return { rows: [], errors: ['CSV 需要標題列與至少一筆資料'] };
+
+      const headers = matrix[0].map(canonicalCsvHeader);
+      const aliases = csvAliases(type);
+      const canonicalAliases = Object.fromEntries(Object.entries(aliases).map(([key, list]) => [key, list.map(canonicalCsvHeader)]));
+      const ids = new Set();
+
+      function valueFor(row, key) {
+        const index = headers.findIndex(header => canonicalAliases[key].includes(header));
+        return index >= 0 ? String(row[index] ?? '').trim() : '';
+      }
+
+      const rows = matrix.slice(1).map((row, index) => {
+        const line = index + 2;
+        if (type === 'classes') {
+          const item = {
+            id: valueFor(row, 'id') || `class-${index + 1}`,
+            semesterId: valueFor(row, 'semesterId') || currentSemesterId,
+            date: valueFor(row, 'date'),
+            title: valueFor(row, 'title'),
+            sortOrder: normalizeClientSortOrder(valueFor(row, 'sortOrder'), index + 1)
+          };
+          if (!item.date) errors.push(`第 ${line} 列缺少 date`);
+          if (!item.title) errors.push(`第 ${line} 列缺少 title`);
+          if (ids.has(item.id)) errors.push(`第 ${line} 列 id 重複：${item.id}`);
+          ids.add(item.id);
+          return item;
+        }
+
+        const item = {
+          id: valueFor(row, 'id') || `student-${String(index + 1).padStart(3, '0')}`,
+          group: valueFor(row, 'group'),
+          role: valueFor(row, 'role'),
+          unit: valueFor(row, 'unit'),
+          name: valueFor(row, 'name'),
+          studentNo: valueFor(row, 'studentNo'),
+          url: valueFor(row, 'url') || '#',
+          active: valueFor(row, 'active') || 'TRUE',
+          sortOrder: normalizeClientSortOrder(valueFor(row, 'sortOrder'), index + 1),
+          semesterId: valueFor(row, 'semesterId') || currentSemesterId
+        };
+        if (!item.group) errors.push(`第 ${line} 列缺少 group`);
+        if (!item.role) errors.push(`第 ${line} 列缺少 role`);
+        if (!item.name) errors.push(`第 ${line} 列缺少 name`);
+        if (ids.has(item.id)) errors.push(`第 ${line} 列 id 重複：${item.id}`);
+        ids.add(item.id);
+        return item;
+      });
+
+      return { rows, errors };
+    }
+
+    function importPreviewConfig(type) {
+      if (type === 'classes') {
+        return {
+          label: '課程',
+          previewId: 'classImportPreview',
+          buttonId: 'classImportButton',
+          action: 'importClasses',
+          columns: [
+            { key: 'id', label: 'id' },
+            { key: 'semesterId', label: 'semesterId' },
+            { key: 'date', label: 'date' },
+            { key: 'title', label: 'title' },
+            { key: 'sortOrder', label: 'sortOrder' }
+          ]
+        };
+      }
+      return {
+        label: '學生',
+        previewId: 'studentImportPreview',
+        buttonId: 'studentImportButton',
+        action: 'importStudents',
+        columns: [
+          { key: 'id', label: 'id' },
+          { key: 'group', label: 'group' },
+          { key: 'role', label: 'role' },
+          { key: 'unit', label: 'unit' },
+          { key: 'name', label: 'name' },
+          { key: 'studentNo', label: 'studentNo' },
+          { key: 'active', label: 'active' },
+          { key: 'sortOrder', label: 'sortOrder' }
+        ]
+      };
+    }
+
+    function renderImportPreview(type) {
+      const state = adminImportState[type];
+      const config = importPreviewConfig(type);
+      const preview = document.getElementById(config.previewId);
+      const button = document.getElementById(config.buttonId);
+      button.disabled = Boolean(state.errors.length || !state.rows.length);
+
+      if (!state.fileName) {
+        preview.innerHTML = '';
+        return;
+      }
+
+      const shownRows = state.rows.slice(0, 80);
+      const hiddenCount = Math.max(state.rows.length - shownRows.length, 0);
+      const errorHtml = state.errors.length
+        ? `<div class="alert alert-danger"><div class="fw-bold mb-1">匯入前請修正</div><ul class="mb-0">${state.errors.map(error => `<li>${escapeHtml(error)}</li>`).join('')}</ul></div>`
+        : `<div class="alert alert-success">${escapeHtml(state.fileName)} 已解析 ${state.rows.length} 筆${config.label}資料</div>`;
+
+      preview.innerHTML = `
+        ${errorHtml}
+        ${renderSimpleTable(shownRows, config.columns, 'CSV 沒有可匯入資料')}
+        ${hiddenCount ? `<div class="small text-muted mt-2">另有 ${hiddenCount} 筆未顯示</div>` : ''}
+      `;
+    }
+
+    function readFileText(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result || '');
+        reader.onerror = () => reject(new Error('讀取 CSV 失敗'));
+        reader.readAsText(file, 'utf-8');
+      });
+    }
+
+    async function handleCsvFile(type, input) {
+      const file = input.files && input.files[0];
+      adminImportState[type] = { rows: [], errors: [], fileName: file ? file.name : '' };
+      renderImportPreview(type);
+      if (!file) return;
+
+      try {
+        const text = await readFileText(file);
+        const parsed = mapCsvRows(type, text);
+        adminImportState[type] = { ...parsed, fileName: file.name };
+        renderImportPreview(type);
+        setAdminStatus(parsed.errors.length ? 'CSV 預覽包含錯誤' : 'CSV 預覽完成', parsed.errors.length ? 'danger' : 'success');
+      } catch (error) {
+        adminImportState[type] = { rows: [], errors: [error.message], fileName: file.name };
+        renderImportPreview(type);
+        setAdminStatus('CSV 讀取失敗', 'danger');
+      }
+    }
+
+    async function confirmCsvImport(type) {
+      const state = adminImportState[type];
+      const config = importPreviewConfig(type);
+      if (!state.rows.length || state.errors.length) return;
+      if (!apiUrl) {
+        alert('請先設定 Apps Script API URL');
+        configureApi();
+        return;
+      }
+      if (!confirm(`確定將 ${state.rows.length} 筆${config.label}資料匯入「${currentSemesterLabel()}」？\n這會替換 Google Sheet 目前學期的${config.label}清單。`)) return;
+
+      const button = document.getElementById(config.buttonId);
+      button.disabled = true;
+      setAdminStatus(`${config.label}匯入中`, 'warning');
+
+      try {
+        const result = await postApi(config.action, {
+          semesterId: currentSemesterId,
+          rows: state.rows
+        });
+        if (result && result.ok === false) throw new Error(result.error || '匯入失敗');
+        await reloadFromApi({ semesterId: currentSemesterId, keepSemester: true, throwOnError: true });
+        renderAdminOverview();
+        renderImportPreview(type);
+        setAdminStatus(`${config.label}匯入完成，已重新同步前端資料`, 'success');
+      } catch (error) {
+        console.error(error);
+        button.disabled = false;
+        setAdminStatus(`${config.label}匯入失敗：${error.message}`, 'danger');
       }
     }
 
@@ -1160,6 +1593,9 @@
     classSelect.addEventListener('change', () => {
       restoreStateForSelectedClass();
       renderList();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && document.getElementById('adminModal').classList.contains('show')) closeAdminModal();
     });
     loadCachedSemesters();
     initClasses();
