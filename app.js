@@ -147,6 +147,93 @@ const DEFAULT_SEMESTERS = [
       updateSyncBadge(text, style);
     }
 
+
+    function showAppModal(options = {}) {
+      return new Promise(resolve => {
+        const modal = document.getElementById('appModal');
+        const titleEl = document.getElementById('appModalTitle');
+        const messageEl = document.getElementById('appModalMessage');
+        const inputEl = document.getElementById('appModalInput');
+        const okButton = document.getElementById('appModalOkButton');
+        const cancelButton = document.getElementById('appModalCancelButton');
+        const closeButton = document.getElementById('appModalCloseButton');
+
+        if (!modal || !titleEl || !messageEl || !inputEl || !okButton || !cancelButton || !closeButton) {
+          resolve(options.input ? window.prompt(options.message || '', options.defaultValue || '') : true);
+          return;
+        }
+
+        titleEl.textContent = options.title || '提醒';
+        messageEl.textContent = options.message || '';
+        inputEl.classList.toggle('d-none', !options.input);
+        inputEl.value = options.defaultValue || '';
+        inputEl.placeholder = options.placeholder || '';
+        cancelButton.classList.toggle('d-none', !options.showCancel);
+        okButton.textContent = options.okText || '確認';
+        cancelButton.textContent = options.cancelText || '取消';
+
+        const okClass = options.okClass || 'btn-primary';
+        okButton.className = `btn ${okClass}`;
+
+        function cleanup(value) {
+          modal.classList.remove('show');
+          modal.setAttribute('aria-hidden', 'true');
+          okButton.onclick = null;
+          cancelButton.onclick = null;
+          closeButton.onclick = null;
+          modal.onclick = null;
+          document.removeEventListener('keydown', handleKeydown);
+          resolve(value);
+        }
+
+        function handleKeydown(event) {
+          if (event.key === 'Escape') cleanup(options.showCancel || options.input ? null : true);
+          if (event.key === 'Enter' && options.input) cleanup(inputEl.value);
+        }
+
+        okButton.onclick = () => cleanup(options.input ? inputEl.value : true);
+        cancelButton.onclick = () => cleanup(null);
+        closeButton.onclick = () => cleanup(options.showCancel || options.input ? null : true);
+        modal.onclick = event => {
+          if (event.target === modal) cleanup(options.showCancel || options.input ? null : true);
+        };
+        document.addEventListener('keydown', handleKeydown);
+
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+        if (options.input) setTimeout(() => inputEl.focus(), 0);
+        else setTimeout(() => okButton.focus(), 0);
+      });
+    }
+
+    function showMessage(message, title = '提醒', options = {}) {
+      return showAppModal({ ...options, title, message });
+    }
+
+    function showConfirm(message, title = '請確認', options = {}) {
+      return showAppModal({
+        ...options,
+        title,
+        message,
+        showCancel: true,
+        okText: options.okText || '確認',
+        cancelText: options.cancelText || '取消'
+      });
+    }
+
+    function showPrompt(message, defaultValue = '', title = '設定', options = {}) {
+      return showAppModal({
+        ...options,
+        title,
+        message,
+        input: true,
+        defaultValue,
+        showCancel: true,
+        okText: options.okText || '儲存',
+        cancelText: options.cancelText || '取消'
+      });
+    }
+
     function jsonpRequest(action, params = {}) {
       if (!apiUrl) return Promise.reject(new Error('API URL is not set'));
       return new Promise((resolve, reject) => {
@@ -655,8 +742,8 @@ const DEFAULT_SEMESTERS = [
       if (apiUrl) reloadFromApi({ semesterId: currentSemesterId, keepSemester: true, background: true });
     }
 
-    function configureApi() {
-      const nextUrl = prompt('貼上 Apps Script Web App URL（必須是 /exec；留空恢復預設）', apiUrl || DEFAULT_API_URL);
+    async function configureApi() {
+      const nextUrl = await showPrompt('貼上 Apps Script Web App URL（必須是 /exec；留空恢復預設）', apiUrl || DEFAULT_API_URL, '設定 API');
       if (nextUrl === null) return;
 
       const trimmedUrl = nextUrl.trim();
@@ -669,7 +756,7 @@ const DEFAULT_SEMESTERS = [
 
       const normalizedUrl = normalizeApiUrl(trimmedUrl);
       if (!normalizedUrl) {
-        alert('API URL 格式不正確，請貼上 Apps Script Web App 的 /exec 網址，不是部署作業 ID。');
+        await showMessage('API URL 格式不正確，請貼上 Apps Script Web App 的 /exec 網址，不是部署作業 ID。', 'API URL 錯誤');
         return;
       }
 
@@ -946,7 +1033,7 @@ const DEFAULT_SEMESTERS = [
       const errors = semesterFormErrors(payload);
       validateCreateSemesterForm();
       if (errors.length) return;
-      if (!confirm(`確定新增學期「${payload.name}」？\nsemesterId：${payload.id}`)) return;
+      if (!await showConfirm(`確定新增學期「${payload.name}」？\nsemesterId：${payload.id}`, '新增學期')) return;
 
       const button = document.getElementById('createSemesterButton');
       button.disabled = true;
@@ -989,7 +1076,7 @@ const DEFAULT_SEMESTERS = [
       }
       const studentText = copyStudents ? `學生 ${counts.students} 人` : '不複製學生';
       const classText = copyClasses ? `課程 ${counts.classes} 堂` : '不複製課程';
-      if (!confirm(`確定複製學期？\n來源：${sourceSemesterId}\n新學期：${payload.id} / ${payload.name}\n${studentText}，${classText}\n不會複製 attendance。`)) return;
+      if (!await showConfirm(`確定複製學期？\n來源：${sourceSemesterId}\n新學期：${payload.id} / ${payload.name}\n${studentText}，${classText}\n不會複製 attendance。`, '複製學期')) return;
 
       const button = document.getElementById('cloneSemesterButton');
       button.disabled = true;
@@ -1235,11 +1322,11 @@ const DEFAULT_SEMESTERS = [
       const config = importPreviewConfig(type);
       if (!state.rows.length || state.errors.length) return;
       if (!apiUrl) {
-        alert('請先設定 Apps Script API URL');
+        await showMessage('請先設定 Apps Script API URL', '尚未設定 API');
         configureApi();
         return;
       }
-      if (!confirm(`確定將 ${state.rows.length} 筆${config.label}資料匯入「${currentSemesterLabel()}」？\n這會替換 Google Sheet 目前學期的${config.label}清單。`)) return;
+      if (!await showConfirm(`確定將 ${state.rows.length} 筆${config.label}資料匯入「${currentSemesterLabel()}」？\n這會替換 Google Sheet 目前學期的${config.label}清單。`, `匯入${config.label}`)) return;
 
       const button = document.getElementById(config.buttonId);
       button.disabled = true;
@@ -1688,7 +1775,7 @@ const DEFAULT_SEMESTERS = [
 
     async function exportAttendanceExcel() {
       if (!window.ExcelJS) {
-        alert('Excel 匯出套件尚未載入完成，請稍後再試。');
+        await showMessage('Excel 匯出套件尚未載入完成，請稍後再試。', '無法匯出');
         return;
       }
 
@@ -1787,7 +1874,7 @@ const DEFAULT_SEMESTERS = [
         setTimeout(() => URL.revokeObjectURL(url), 0);
       } catch (error) {
         console.error(error);
-        alert('匯出 Excel 時發生錯誤，請再試一次。');
+        await showMessage('匯出 Excel 時發生錯誤，請再試一次。', '匯出失敗');
       } finally {
         exportButton.disabled = false;
         exportButton.textContent = '匯出 Excel';
@@ -1809,9 +1896,17 @@ const DEFAULT_SEMESTERS = [
     }
 
     async function submitAttendance() {
+      if (!currentClasses.length || !currentClass()?.id) {
+        await showMessage('請先新增課程', '尚未設定課程');
+        return;
+      }
+
       const checkedStudents = currentStudents.filter(isPresent);
       const pendingStudents = checkedStudents.filter(student => !confirmed.has(student.key));
-      if (!checkedStudents.length) { alert('請先勾選有來的人'); return; }
+      if (!checkedStudents.length) {
+        await showMessage('請先勾選有來的人', '尚未勾選');
+        return;
+      }
 
       setSubmitLoading(true, '同步中，請稍候...');
 
@@ -1863,7 +1958,7 @@ const DEFAULT_SEMESTERS = [
         setSubmitLoading(false);
       }
 
-      alert(saveFailed ? `${message}\n本機已更新，但 Google Sheet 儲存失敗，請再按一次送出或同步後確認。` : message);
+      await showMessage(saveFailed ? `${message}\n本機已更新，但 Google Sheet 儲存失敗，請再按一次送出或同步後確認。` : message, saveFailed ? '送出完成但雲端儲存失敗' : '送出完成');
     }
 
     function runSelfTests() {
