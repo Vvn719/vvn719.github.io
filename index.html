@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
@@ -38,6 +38,7 @@
       <span class="navbar-brand fw-bold">34期培緣班報到</span>
       <span class="badge text-bg-primary" id="countBadge">已出席 0 人</span>
       <div class="d-flex gap-2 ms-auto">
+        <select class="form-select form-select-sm w-auto" id="semesterSelect" aria-label="選擇學期"></select>
         <span class="badge text-bg-light border text-dark align-self-center" id="syncBadge">本機資料</span>
         <button class="btn btn-outline-secondary btn-sm" type="button" onclick="configureApi()">設定 API</button>
         <button class="btn btn-outline-primary btn-sm" type="button" onclick="reloadFromApi()">同步</button>
@@ -157,11 +158,11 @@
       { group: '三組', role: '學員', unit: '瑞周全真天如', name: '邱瑀宸', id: '', url: '#' }
     ];
 
-    let classes = DEFAULT_CLASSES.map((item, index) => ({ ...item, id: item.id || `class-${index + 1}`, sortOrder: index + 1 }));
-    let students = DEFAULT_STUDENTS.map((item, index) => ({ ...item, apiId: item.apiId || `student-${String(index + 1).padStart(3, '0')}`, sortOrder: index + 1, active: true }));
+    let currentClasses = DEFAULT_CLASSES.map((item, index) => ({ ...item, id: item.id || `class-${index + 1}`, sortOrder: index + 1 }));
+    let currentStudents = DEFAULT_STUDENTS.map((item, index) => ({ ...item, apiId: item.apiId || `student-${String(index + 1).padStart(3, '0')}`, sortOrder: index + 1, active: true }));
     let semesters = DEFAULT_SEMESTERS.map(item => ({ ...item }));
 
-    const GROUPS = ['講師', '一組', '二組', '三組'];
+    const DEFAULT_GROUPS = ['講師', '一組', '二組', '三組'];
     const selected = new Set();
     const confirmed = new Set();
     const excluded = new Set();
@@ -175,22 +176,35 @@
     const listEl = document.getElementById('studentList');
     const searchEl = document.getElementById('searchInput');
     const classSelect = document.getElementById('classSelect');
+    const semesterSelect = document.getElementById('semesterSelect');
     const syncBadge = document.getElementById('syncBadge');
     const API_URL_STORAGE_KEY = 'attendanceApiUrl';
-    const DATA_CACHE_KEY = 'attendanceDataCache:v1';
+    const SELECTED_SEMESTER_STORAGE_KEY = 'attendanceSelectedSemesterId';
+    const SEMESTERS_CACHE_KEY = 'attendanceSemestersCache:v2';
+    const DATA_CACHE_PREFIX = 'attendanceDataCache:v2';
     const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbyuTmdc2cC_zqzP6AOiY5fn_qNduFjseDGs0KuY3m7R5ijQ9fFTred8vB-TmspdciHgDw/exec';
     let apiUrl = localStorage.getItem(API_URL_STORAGE_KEY) || DEFAULT_API_URL;
-    let currentSemesterId = 'sem-114-down';
+    let currentSemesterId = localStorage.getItem(SELECTED_SEMESTER_STORAGE_KEY) || DEFAULT_SEMESTERS[0].id;
 
     function assignStudentKeys() {
-      students.forEach((student, index) => {
+      currentStudents.forEach((student, index) => {
         student.key = student.apiId || `${student.group}-${student.role}-${student.name}-${index}`;
       });
     }
 
     assignStudentKeys();
 
-    function initClasses() { classSelect.innerHTML = classes.map((item, index) => `<option value="${index}">${item.date}　${item.title}</option>`).join(''); }
+    function initClasses() {
+      classSelect.innerHTML = currentClasses.length
+        ? currentClasses.map((item, index) => `<option value="${index}">${item.date}　${item.title}</option>`).join('')
+        : '<option value="0">尚未設定課程</option>';
+    }
+
+    function initSemesters() {
+      semesterSelect.innerHTML = semesters.map(item => `<option value="${item.id}">${item.name || item.id}</option>`).join('');
+      semesterSelect.value = currentSemesterId;
+    }
+
     function updateSyncBadge(text, style = 'light') {
       syncBadge.className = `badge text-bg-${style} border align-self-center`;
       syncBadge.textContent = text;
@@ -279,10 +293,42 @@
         unit: item.unit || '',
         name: item.name || '',
         id: item.studentNo || item.idNo || (item.apiId ? item.id || '' : ''),
+        semesterId: item.semesterId || '',
         url: item.url || '#',
         active: !['false', '0', 'no', '否', '停用'].includes(activeValue),
         sortOrder: Number(item.sortOrder || index + 1)
       };
+    }
+
+    function applySemesters(nextSemesters = DEFAULT_SEMESTERS, preferredSemesterId = currentSemesterId) {
+      semesters = (nextSemesters.length ? nextSemesters : DEFAULT_SEMESTERS).map(normalizeSemester);
+      const selectedSemester = semesters.find(item => item.id === preferredSemesterId);
+      const activeSemester = semesters.find(item => item.status === 'active');
+      currentSemesterId = (selectedSemester || activeSemester || semesters[0] || DEFAULT_SEMESTERS[0]).id;
+      localStorage.setItem(SELECTED_SEMESTER_STORAGE_KEY, currentSemesterId);
+      initSemesters();
+    }
+
+    function currentGroups() {
+      const groups = [];
+      currentStudents.forEach(student => {
+        if (student.group && !groups.includes(student.group)) groups.push(student.group);
+      });
+      return groups.length ? groups : DEFAULT_GROUPS;
+    }
+
+    function reportGroups() {
+      return currentGroups().filter(group => group !== '講師');
+    }
+
+    function currentSemester() {
+      return semesters.find(item => item.id === currentSemesterId) || DEFAULT_SEMESTERS[0];
+    }
+
+    function currentSemesterLabel() {
+      const semester = currentSemester();
+      if (semester.name) return semester.name;
+      return `${semester.year || ''}${semester.term || ''}` || currentSemesterId;
     }
 
     function normalizeSemester(item) {
@@ -332,7 +378,7 @@
       attendanceRecords.clear();
       records.forEach(item => {
         const classIndex = classIndexById(item.classId);
-        const student = students.find(candidate => candidate.apiId === item.studentId || candidate.key === item.studentId);
+        const student = currentStudents.find(candidate => candidate.apiId === item.studentId || candidate.key === item.studentId);
         if (classIndex < 0 || !student) return;
         const recordKey = classRecordKey(classIndex);
         const record = new Map(attendanceRecords.get(recordKey) || []);
@@ -342,21 +388,20 @@
     }
 
     function applyDataSet(data = {}) {
-      semesters = (data.semesters || DEFAULT_SEMESTERS).map(normalizeSemester);
-      const activeSemester = semesters.find(item => item.id === data.semesterId) || semesters.find(item => item.status === 'active') || semesters[0];
-      if (activeSemester?.id) currentSemesterId = activeSemester.id;
+      applySemesters(data.semesters || semesters, data.semesterId || currentSemesterId);
 
-      classes = (data.classes || [])
+      currentClasses = (data.classes || [])
         .filter(item => !item.semesterId || item.semesterId === currentSemesterId)
         .map(normalizeClass)
         .sort((a, b) => a.sortOrder - b.sortOrder);
-      students = (data.students || [])
+      currentStudents = (data.students || [])
+        .filter(item => !item.semesterId || item.semesterId === currentSemesterId)
         .map(normalizeStudent)
         .filter(item => item.active)
         .sort((a, b) => a.sortOrder - b.sortOrder);
 
-      if (!classes.length) classes = DEFAULT_CLASSES.map(normalizeClass);
-      if (!students.length) students = DEFAULT_STUDENTS.map(normalizeStudent);
+      if (!currentClasses.length && currentSemesterId === DEFAULT_SEMESTERS[0].id) currentClasses = DEFAULT_CLASSES.map(normalizeClass);
+      if (!currentStudents.length && currentSemesterId === DEFAULT_SEMESTERS[0].id) currentStudents = DEFAULT_STUDENTS.map(normalizeStudent);
 
       assignStudentKeys();
       initClasses();
@@ -366,7 +411,7 @@
     }
 
     function cacheableStudents() {
-      return students.map(student => {
+      return currentStudents.map(student => {
         const { key, ...item } = student;
         return item;
       });
@@ -378,16 +423,32 @@
         cachedAt: new Date().toISOString(),
         semesterId: currentSemesterId,
         semesters,
-        classes,
+        classes: currentClasses,
         students: cacheableStudents(),
         attendance: attendancePayloadFromRecords()
       };
-      localStorage.setItem(DATA_CACHE_KEY, JSON.stringify(payload));
+      localStorage.setItem(dataCacheKey(), JSON.stringify(payload));
+      localStorage.setItem(SEMESTERS_CACHE_KEY, JSON.stringify({ cachedAt: payload.cachedAt, semesterId: currentSemesterId, semesters }));
     }
 
-    function loadDataCache() {
+    function dataCacheKey(semesterId = currentSemesterId) {
+      return `${DATA_CACHE_PREFIX}:${semesterId || DEFAULT_SEMESTERS[0].id}`;
+    }
+
+    function loadCachedSemesters() {
       try {
-        const raw = localStorage.getItem(DATA_CACHE_KEY);
+        const raw = localStorage.getItem(SEMESTERS_CACHE_KEY);
+        const cached = raw ? JSON.parse(raw) : null;
+        if (cached?.semesters?.length) applySemesters(cached.semesters, localStorage.getItem(SELECTED_SEMESTER_STORAGE_KEY) || cached.semesterId);
+      } catch (error) {
+        console.warn('Failed to read semester cache', error);
+      }
+    }
+
+    function loadDataCache(semesterId = currentSemesterId) {
+      try {
+        const raw = localStorage.getItem(dataCacheKey(semesterId))
+          || (semesterId === DEFAULT_SEMESTERS[0].id ? localStorage.getItem('attendanceDataCache:v1') : null);
         return raw ? JSON.parse(raw) : null;
       } catch (error) {
         console.warn('Failed to read local attendance cache', error);
@@ -395,10 +456,10 @@
       }
     }
 
-    function renderFromCache() {
-      const cached = loadDataCache();
+    function renderFromCache(semesterId = currentSemesterId) {
+      const cached = loadDataCache(semesterId);
       if (!cached) return false;
-      applyDataSet(cached);
+      applyDataSet({ ...cached, semesterId });
       updateSyncBadge('使用本機資料', 'secondary');
       return true;
     }
@@ -411,11 +472,11 @@
     function attendancePayloadFromRecords() {
       const records = [];
       attendanceRecords.forEach((record, recordKey) => {
-        const classItem = classes[Number(recordKey)];
+        const classItem = currentClasses[Number(recordKey)];
         if (!classItem) return;
 
         record.forEach((item, key) => {
-          const student = students.find(candidate => candidate.key === key);
+          const student = currentStudents.find(candidate => candidate.key === key);
           if (!student || !item.status) return;
           records.push({
             semesterId: currentSemesterId,
@@ -444,7 +505,7 @@
       return result;
     }
 
-    async function reloadFromApi() {
+    async function reloadFromApi(options = {}) {
       if (!apiUrl) {
         configureApi();
         return;
@@ -452,16 +513,24 @@
 
       updateSyncBadge('同步中', 'warning');
       try {
-        const data = await jsonpRequest('bootstrap');
-        const nextSemesters = (data.semesters || []).map(normalizeSemester);
+        const preferredSemesterId = options.semesterId || currentSemesterId;
+        const semesterData = await jsonpRequest('semesters');
+        const nextSemesters = (semesterData.semesters || []).map(normalizeSemester);
+        const requestedSemester = nextSemesters.find(item => item.id === preferredSemesterId);
         const activeSemester = nextSemesters.find(item => item.status === 'active') || nextSemesters[0];
-        const semesterId = activeSemester?.id || currentSemesterId;
-        const attendanceData = await jsonpRequest('attendance', { semesterId });
+        const semesterId = requestedSemester?.id || (options.keepSemester ? preferredSemesterId : activeSemester?.id) || preferredSemesterId;
+
+        applySemesters(nextSemesters.length ? nextSemesters : semesters, semesterId);
+
+        const classesData = await jsonpRequest('classes', { semesterId: currentSemesterId });
+        const studentsData = await jsonpRequest('students', { semesterId: currentSemesterId });
+        const attendanceData = await jsonpRequest('attendance', { semesterId: currentSemesterId });
 
         applyDataSet({
-          ...data,
-          semesters: nextSemesters.length ? nextSemesters : data.semesters,
-          semesterId,
+          semesters,
+          semesterId: currentSemesterId,
+          classes: classesData.classes || [],
+          students: studentsData.students || [],
           attendance: attendanceData.records || attendanceData.attendance || []
         });
         saveDataCache('api');
@@ -472,6 +541,21 @@
       }
     }
 
+    async function switchSemester(semesterId) {
+      if (!semesterId || semesterId === currentSemesterId) return;
+      currentSemesterId = semesterId;
+      localStorage.setItem(SELECTED_SEMESTER_STORAGE_KEY, currentSemesterId);
+      initSemesters();
+
+      const usedCache = renderFromCache(currentSemesterId);
+      if (!usedCache) {
+        applyDataSet({ semesters, semesterId: currentSemesterId, classes: [], students: [], attendance: [] });
+        updateSyncBadge('使用本機資料', 'secondary');
+      }
+
+      if (apiUrl) reloadFromApi({ semesterId: currentSemesterId, keepSemester: true });
+    }
+
     function configureApi() {
       const nextUrl = prompt('貼上 Apps Script Web App URL', apiUrl);
       if (nextUrl === null) return;
@@ -479,7 +563,7 @@
 
       if (apiUrl) {
         localStorage.setItem(API_URL_STORAGE_KEY, apiUrl);
-        reloadFromApi();
+        reloadFromApi({ semesterId: currentSemesterId, keepSemester: true });
       } else {
         localStorage.removeItem(API_URL_STORAGE_KEY);
         updateSyncBadge('使用本機資料', 'secondary');
@@ -487,13 +571,13 @@
     }
 
     function pct(actual, total) { if (!total) return '0%'; return `${Math.round((actual / total) * 100)}%`; }
-    function findStudent(key) { return students.find(student => student.key === key); }
-    function classEndColumn() { return 5 + classes.length * 3; }
+    function findStudent(key) { return currentStudents.find(student => student.key === key); }
+    function classEndColumn() { return 5 + currentClasses.length * 3; }
     function summaryStartColumn() { return classEndColumn() + 2; }
     function totalExportColumns() { return summaryStartColumn() + 2; }
     function classRecordKey(index = classSelect.value || 0) { return String(index); }
-    function currentClass() { return classes[Number(classSelect.value || 0)] || classes[0]; }
-    function classIndexById(classId) { return classes.findIndex(item => item.id === classId); }
+    function currentClass() { return currentClasses[Number(classSelect.value || 0)] || currentClasses[0]; }
+    function classIndexById(classId) { return currentClasses.findIndex(item => item.id === classId); }
     function isExcluded(student) { return Boolean(student && excluded.has(student.key)); }
     function isPresent(student) { if (!student || isExcluded(student)) return false; const special = specialNotes.get(student.key); return selected.has(student.key) || special?.type === 'online' || special?.type === 'late'; }
     function isAbsent(student) { if (!student || isExcluded(student)) return false; return specialNotes.get(student.key)?.type === 'absent'; }
@@ -514,7 +598,7 @@
       const alreadyRecordedCurrent = attendanceRecords.get(currentClassIndex)?.has(student.key);
       if (!alreadyRecordedCurrent && isPresent(student)) presentCount += 1;
       if (!alreadyRecordedCurrent && isAbsent(student)) absentCount += 1;
-      return { presentCount, absentCount, totalCount: classes.length };
+      return { presentCount, absentCount, totalCount: currentClasses.length };
     }
 
     function nameClassFor(student) {
@@ -525,7 +609,7 @@
     }
 
     function statsFor(group, role = null) {
-      const people = students.filter(student => student.group === group && (!role || student.role === role) && !isExcluded(student));
+      const people = currentStudents.filter(student => student.group === group && (!role || student.role === role) && !isExcluded(student));
       const actual = people.filter(isPresent).length;
       return { actual, total: people.length, rate: pct(actual, people.length) };
     }
@@ -543,13 +627,13 @@
     }
 
     function specialTextFor(group) {
-      const list = students.filter(student => student.group === group && !isExcluded(student) && specialNotes.has(student.key)).map(student => ({ ...student, special: specialNotes.get(student.key) }));
+      const list = currentStudents.filter(student => student.group === group && !isExcluded(student) && specialNotes.has(student.key)).map(student => ({ ...student, special: specialNotes.get(student.key) }));
       if (!list.length) return '<span class="text-muted">無</span>';
       return `<ul class="mb-0 ps-3">${list.map(student => student.special.type === 'absent' ? `<li><strong>${student.name}</strong>：${student.special.note}</li>` : `<li><strong>${student.name}</strong>：${specialLabel(student.special.type)}</li>`).join('')}</ul>`;
     }
 
     function getFilteredAndSortedPeople(group, keyword) {
-      return students.filter(student => {
+      return currentStudents.filter(student => {
         if (student.group !== group) return false;
         if (!keyword) return true;
         return [student.name, student.group, student.role, student.unit, student.id].join(' ').toLowerCase().includes(keyword);
@@ -562,9 +646,9 @@
     }
 
     function renderSummary() {
-      const selectedClass = classes[classSelect.value] || classes[0];
-      const totalActual = students.filter(isPresent).length;
-      const total = students.filter(student => !isExcluded(student)).length;
+      const selectedClass = currentClasses[classSelect.value] || currentClasses[0] || { date: '', title: '尚未設定課程' };
+      const totalActual = currentStudents.filter(isPresent).length;
+      const total = currentStudents.filter(student => !isExcluded(student)).length;
       document.getElementById('summaryArea').innerHTML = `
         <div class="card summary-card shadow-sm"><div class="card-body">
           <div class="d-flex flex-column flex-md-row justify-content-between gap-2 mb-3">
@@ -572,7 +656,7 @@
             <div class="text-md-end"><div class="text-muted">總出席率</div><h4 class="mb-0">${totalActual} / ${total}（${pct(totalActual, total)}）</h4></div>
           </div>
           <div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0 table-summary"><thead class="table-light"><tr><th>組別</th><th>輔導</th><th>學員</th><th>該組當天總出席率</th></tr></thead><tbody>
-            ${GROUPS.map(group => {
+            ${currentGroups().map(group => {
               const guide = statsFor(group, '輔導');
               const member = statsFor(group, '學員');
               const all = statsFor(group);
@@ -580,7 +664,7 @@
               return `<tr><th>${group} ${all.total > 0 && all.actual === all.total ? '🎉' : ''}</th><td>${isTeacherGroup ? '-' : `${guide.actual} / ${guide.total}（${guide.rate}）`}</td><td>${isTeacherGroup ? '-' : `${member.actual} / ${member.total}（${member.rate}）`}</td><td>${all.actual} / ${all.total}（${all.rate}）</td></tr>`;
             }).join('')}
           </tbody></table></div>
-          <div class="mt-4"><h5 class="fw-bold mb-2">特殊情況</h5><div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0 table-summary"><thead class="table-light"><tr><th style="width: 7rem;">組別</th><th>特殊情況條列</th></tr></thead><tbody>${['一組', '二組', '三組'].map(group => `<tr><th>${group}</th><td>${specialTextFor(group)}</td></tr>`).join('')}</tbody></table></div></div>
+          <div class="mt-4"><h5 class="fw-bold mb-2">特殊情況</h5><div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0 table-summary"><thead class="table-light"><tr><th style="width: 7rem;">組別</th><th>特殊情況條列</th></tr></thead><tbody>${reportGroups().map(group => `<tr><th>${group}</th><td>${specialTextFor(group)}</td></tr>`).join('')}</tbody></table></div></div>
         </div></div>`;
     }
 
@@ -623,7 +707,7 @@
     function renderList() {
       const keyword = searchEl.value.trim().toLowerCase();
       visibleIds.clear();
-      listEl.innerHTML = GROUPS.map(group => {
+      listEl.innerHTML = currentGroups().map(group => {
         const people = getFilteredAndSortedPeople(group, keyword);
         people.forEach(student => visibleIds.add(student.key));
         if (!people.length) return '';
@@ -700,7 +784,7 @@
     function toggleAdvanced(key, event) { event.stopPropagation(); if (advancedOpen.has(key)) advancedOpen.delete(key); else advancedOpen.add(key); renderList(); }
 
     function setExcludedFromClass(key, classIndex, shouldExclude) {
-      for (let index = classIndex; index < classes.length; index += 1) {
+      for (let index = classIndex; index < currentClasses.length; index += 1) {
         const recordKey = String(index);
         const record = new Map(attendanceRecords.get(recordKey) || []);
 
@@ -735,8 +819,8 @@
     }
 
     function updateSummary() {
-      const presentCount = students.filter(isPresent).length;
-      const pendingCount = students.filter(student => isPresent(student) && !confirmed.has(student.key)).length;
+      const presentCount = currentStudents.filter(isPresent).length;
+      const pendingCount = currentStudents.filter(student => isPresent(student) && !confirmed.has(student.key)).length;
       document.getElementById('countBadge').textContent = `已出席 ${presentCount} 人`;
       document.getElementById('selectedSummary').textContent = pendingCount ? `準備送出 ${pendingCount} 人報到` : '尚未勾選';
     }
@@ -748,7 +832,7 @@
     function checkAllVisible() { visibleIds.forEach(key => { if (specialNotes.get(key)?.type !== 'absent' && !excluded.has(key)) selected.add(key); }); renderList(); }
 
     function selectGroup(group) {
-      students.forEach(student => {
+      currentStudents.forEach(student => {
         if (student.group !== group) return;
         if (excluded.has(student.key)) return;
         if (specialNotes.get(student.key)?.type === 'absent') return;
@@ -758,7 +842,7 @@
     }
 
     function clearGroup(group) {
-      students.forEach(student => {
+      currentStudents.forEach(student => {
         if (student.group !== group) return;
         if (confirmed.has(student.key)) return;
 
@@ -778,7 +862,7 @@
       const currentClassIndex = String(classSelect.value || 0);
       if (String(classIndex) !== currentClassIndex) return record;
 
-      students.forEach(student => {
+      currentStudents.forEach(student => {
         if (excluded.has(student.key)) {
           record.set(student.key, { status: 'excluded', note: '不列入出席' });
           return;
@@ -863,7 +947,7 @@
       row.getCell(1).value = options.rawLabel ? label : `${label}  ( 實到 / 應到 )`;
       ws.mergeCells(rowNumber, 1, rowNumber, 5);
 
-      classes.forEach((_, classIndex) => {
+      currentClasses.forEach((_, classIndex) => {
         const startCol = classStartColumn(classIndex);
         const { actual, expected, rate } = attendanceCounts(people, recordsByClass[classIndex]);
         row.getCell(startCol).value = actual;
@@ -893,7 +977,7 @@
       row.getCell(4).value = '';
       row.getCell(5).value = student.name;
 
-      classes.forEach((_, classIndex) => {
+      currentClasses.forEach((_, classIndex) => {
         const startCol = classStartColumn(classIndex);
         const item = recordsByClass[classIndex].get(student.key);
         ws.mergeCells(rowNumber, startCol, rowNumber, startCol + 1);
@@ -921,7 +1005,7 @@
       exportButton.textContent = '匯出中...';
 
       try {
-        const recordsByClass = classes.map((_, index) => snapshotRecordForClass(index));
+        const recordsByClass = currentClasses.map((_, index) => snapshotRecordForClass(index));
         const workbook = new ExcelJS.Workbook();
         workbook.creator = '34期培緣班報到系統';
         workbook.created = new Date();
@@ -933,7 +1017,7 @@
 
         ws.columns = [
           { width: 16 }, { width: 10 }, { width: 18 }, { width: 10 }, { width: 12 },
-          ...classes.flatMap(() => [{ width: 5 }, { width: 5 }, { width: 16 }]),
+          ...currentClasses.flatMap(() => [{ width: 5 }, { width: 5 }, { width: 16 }]),
           { width: 3 }, { width: 12 }, { width: 12 }, { width: 12 }
         ];
 
@@ -948,7 +1032,7 @@
           ws.getCell(3, index + 1).value = label;
         });
 
-        classes.forEach((item, index) => {
+        currentClasses.forEach((item, index) => {
           const startCol = classStartColumn(index);
           ws.mergeCells(2, startCol, 2, startCol + 1);
           ws.mergeCells(3, startCol, 3, startCol + 1);
@@ -959,8 +1043,8 @@
 
         const summaryStart = summaryStartColumn();
         ws.getCell(2, summaryStart).value = '應出席次數';
-        ws.getCell(2, summaryStart + 1).value = classes.length;
-        ws.getCell(2, summaryStart + 2).value = '114下';
+        ws.getCell(2, summaryStart + 1).value = currentClasses.length;
+        ws.getCell(2, summaryStart + 2).value = currentSemesterLabel();
         ws.getCell(3, summaryStart).value = '已出席次數';
         ws.getCell(3, summaryStart + 1).value = '未出席次數';
         ws.getCell(3, summaryStart + 2).value = '培緣';
@@ -972,12 +1056,14 @@
         }
 
         let rowNumber = 4;
-        const teachers = students.filter(student => student.group === '講師');
-        teachers.forEach(student => writePersonRow(ws, rowNumber++, student, recordsByClass));
-        writeSummaryRow(ws, rowNumber++, '講師', teachers, recordsByClass);
+        const teachers = currentStudents.filter(student => student.group === '講師');
+        if (teachers.length) {
+          teachers.forEach(student => writePersonRow(ws, rowNumber++, student, recordsByClass));
+          writeSummaryRow(ws, rowNumber++, '講師', teachers, recordsByClass);
+        }
 
-        ['一組', '二組', '三組'].forEach(group => {
-          const groupStudents = students.filter(student => student.group === group);
+        reportGroups().forEach(group => {
+          const groupStudents = currentStudents.filter(student => student.group === group);
           const guides = groupStudents.filter(student => student.role === '輔導');
           const members = groupStudents.filter(student => student.role === '學員');
           groupStudents.forEach(student => writePersonRow(ws, rowNumber++, student, recordsByClass));
@@ -988,8 +1074,8 @@
 
         rowNumber += 1;
         writeSectionRow(ws, rowNumber++, '全班統計');
-        const allGuides = students.filter(student => student.role === '輔導');
-        const allMembers = students.filter(student => student.role === '學員');
+        const allGuides = currentStudents.filter(student => student.role === '輔導');
+        const allMembers = currentStudents.filter(student => student.role === '學員');
         const allClassMembers = [...allGuides, ...allMembers];
         writeSummaryRow(ws, rowNumber++, '全輔導  ( 實到 / 應到 )、出席率', allGuides, recordsByClass, { rawLabel: true, fill: 'FFD9EAD3' });
         writeSummaryRow(ws, rowNumber++, '全學員  ( 實到 / 應到 )、出席率', allMembers, recordsByClass, { rawLabel: true, fill: 'FFD9EAD3' });
@@ -1017,12 +1103,12 @@
     }
 
     async function submitAttendance() {
-      const checkedStudents = students.filter(isPresent);
+      const checkedStudents = currentStudents.filter(isPresent);
       const pendingStudents = checkedStudents.filter(student => !confirmed.has(student.key));
       if (!checkedStudents.length) { alert('請先勾選有來的人'); return; }
       const classIndex = String(classSelect.value || 0);
       const record = new Map();
-      students.forEach(student => {
+      currentStudents.forEach(student => {
         if (excluded.has(student.key)) { record.set(student.key, { status: 'excluded', note: '不列入出席' }); return; }
         const special = specialNotes.get(student.key);
         if (special?.type === 'absent') record.set(student.key, { status: 'absent', note: special.note });
@@ -1058,7 +1144,7 @@
     }
 
     function runSelfTests() {
-      console.assert(Array.isArray(students) && students.length === 49, '測試失敗：人員數應為 49');
+      console.assert(Array.isArray(currentStudents) && currentStudents.length === 49, '測試失敗：人員數應為 49');
       console.assert(statsFor('一組', '輔導').total === 8, '測試失敗：一組輔導應為 8 人');
       console.assert(statsFor('一組', '學員').total === 8, '測試失敗：一組學員應為 8 人');
       console.assert(statsFor('二組', '輔導').total === 7, '測試失敗：二組輔導應為 7 人');
@@ -1066,19 +1152,22 @@
       console.assert(statsFor('三組', '輔導').total === 6, '測試失敗：三組輔導應為 6 人');
       console.assert(statsFor('三組', '學員').total === 9, '測試失敗：三組學員應為 9 人');
       console.assert(pct(1, 2) === '50%', '測試失敗：百分比計算錯誤');
-      console.assert(attendanceSummaryFor(students[0]).totalCount === 5, '測試失敗：總堂數應為 5');
+      console.assert(attendanceSummaryFor(currentStudents[0]).totalCount === 5, '測試失敗：總堂數應為 5');
     }
 
     searchEl.addEventListener('input', renderList);
+    semesterSelect.addEventListener('change', event => switchSemester(event.target.value));
     classSelect.addEventListener('change', () => {
       restoreStateForSelectedClass();
       renderList();
     });
+    loadCachedSemesters();
     initClasses();
+    initSemesters();
     runSelfTests();
-    const usedCache = renderFromCache();
+    const usedCache = renderFromCache(currentSemesterId);
     if (apiUrl) {
-      reloadFromApi();
+      reloadFromApi({ semesterId: currentSemesterId, keepSemester: true });
     } else if (!usedCache) {
       updateSyncBadge('使用本機資料', 'secondary');
       renderList();

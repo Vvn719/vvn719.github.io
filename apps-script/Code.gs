@@ -10,7 +10,7 @@ const SHEETS = {
 const HEADERS = {
   semesters: ['id', 'name', 'year', 'term', 'status'],
   classes: ['id', 'semesterId', 'date', 'title', 'sortOrder'],
-  students: ['id', 'group', 'role', 'unit', 'name', 'studentNo', 'url', 'active', 'sortOrder'],
+  students: ['id', 'group', 'role', 'unit', 'name', 'studentNo', 'url', 'active', 'sortOrder', 'semesterId'],
   attendance: ['semesterId', 'classId', 'studentId', 'status', 'note', 'updatedAt']
 };
 
@@ -98,7 +98,7 @@ function doGet(e) {
     if (action === 'setup') return respond_({ ok: true, setup: true }, callback);
     if (action === 'semesters') return respond_({ ok: true, semesters: readSheetObjects_(SHEETS.semesters) }, callback);
     if (action === 'classes') return respond_({ ok: true, classes: filterBySemester_(readSheetObjects_(SHEETS.classes), params.semesterId) }, callback);
-    if (action === 'students') return respond_({ ok: true, students: readSheetObjects_(SHEETS.students) }, callback);
+    if (action === 'students') return respond_({ ok: true, students: filterBySemester_(readSheetObjects_(SHEETS.students), params.semesterId) }, callback);
     if (action === 'attendance') return respond_({ ok: true, records: filterBySemester_(readSheetObjects_(SHEETS.attendance), params.semesterId) }, callback);
 
     return respond_({
@@ -211,7 +211,7 @@ function normalizeCell_(value) {
 
 function filterBySemester_(records, semesterId) {
   if (!semesterId) return records;
-  return records.filter(record => !record.semesterId || record.semesterId === semesterId);
+  return records.filter(record => record.semesterId ? record.semesterId === semesterId : semesterId === DEFAULT_SEMESTER_ID);
 }
 
 function respond_(payload, callback) {

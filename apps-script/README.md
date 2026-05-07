@@ -28,9 +28,11 @@
 1. 打開 GitHub Pages 報到系統。
 2. 點右上角「設定 API」。
 3. 貼上 Apps Script Web App URL。
-4. 按「同步」確認狀態顯示為 `Google Sheet`。
+4. 按「同步」確認狀態顯示為 `已同步`。
 
-之後送出報到時，點名資料會寫進 `attendance` 工作表。前端讀取資料時會用 `semesters` 的 `status=active` 那一列當作目前學期。
+之後送出報到時，點名資料會寫進 `attendance` 工作表。前端會先讀取 `semesters`，再依目前選擇的 `semesterId` 讀取課程、學生與點名紀錄。
+
+新增學期時，請在 `classes` 填入對應的 `semesterId`。`students` 也可以填 `semesterId`，這樣不同學期能使用不同學生、分組與角色；舊資料若 `semesterId` 空白，會視為預設的 `sem-114-down`。
 
 ## API 動作
 
