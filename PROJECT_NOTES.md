@@ -12,6 +12,8 @@
 2. `localStorage` 快取。
 3. `index.html` 與 `Code.gs` 內建預設資料。
 
+同步策略：頁面載入與重整時先顯示 cache，再背景同步目前學期最新資料。API URL 會優先使用 `localStorage` 覆蓋值，沒有覆蓋值時自動使用 `DEFAULT_API_URL`，所以換裝置不需要重新設定。
+
 ## 系統架構
 
 - Frontend：`index.html`
@@ -20,11 +22,11 @@
   - JSONP GET 讀取 Apps Script。
   - `fetch` POST 儲存 attendance。
   - `localStorage` 保存 API URL、學期選擇與每學期資料快取。
-  - 管理模式 Modal：查看目前學期資料、預覽並匯入學生 CSV、預覽並匯入課程 CSV。
+  - 管理模式 Modal：查看目前學期資料、新增/複製學期、預覽並匯入學生 CSV、預覽並匯入課程 CSV。
 - Backend：`apps-script/Code.gs`
   - 綁定 Google Sheet。
   - 自動建立 `semesters`、`classes`、`students`、`attendance` 四張工作表。
-  - 提供 GET actions、`saveAttendance`、`importStudents`、`importClasses` POST。
+  - 提供 GET actions、`saveAttendance`、`createSemester`、`cloneSemester`、`importStudents`、`importClasses` POST。
 - Hosting：GitHub Pages
   - repo 名稱是 `vvn719.github.io`。
   - 目前沒有 build、package、workflow，直接部署 root 的 `index.html`。
@@ -69,6 +71,8 @@ GET actions：
 POST actions：
 
 - `saveAttendance`：儲存 attendance。
+- `createSemester`：新增學期，檢查 `semesterId` 不可重複、`name` 不可空白。
+- `cloneSemester`：複製來源學期到新學期，可複製 students/classes，不複製 attendance。
 - `importStudents`：匯入目前學期學生名單，替換 `students` 同學期 rows。
 - `importClasses`：匯入目前學期課程，替換 `classes` 同學期 rows。
 
@@ -85,6 +89,16 @@ CSV 匯入流程：前端先解析 CSV 並顯示預覽，確認後才寫入 Goog
 - `attendanceDataCache:v1`：舊版預設學期 fallback。
 
 快取在 API 同步成功與送出報到後更新。API 失敗時，本機狀態仍保存，badge 會顯示同步或儲存失敗。
+
+自動同步：
+
+- API URL 來源優先序是 `localStorage.attendanceApiUrl`，其次是 `DEFAULT_API_URL`。
+- 「設定 API」保留給管理者覆蓋預設 URL，留空會恢復預設 URL。
+- 每 30 秒同步目前選取的 `semesterId`。
+- 週期同步只抓目前學期的 `classes`、`students`、`attendance`，不重抓所有學期。
+- 頁面不可見時暫停；回到頁面時立刻同步一次。
+- 同步進行中會避免重複呼叫。
+- API 回來後只有資料有變才重新 render。
 
 ## Semester-Aware Model
 
@@ -139,8 +153,12 @@ CSV 匯入流程：前端先解析 CSV 並顯示預覽，確認後才寫入 Goog
 - 報到卡片 UI。
 - 搜尋、快速跳組、全選可見人員、清除勾選。
 - 學期選擇與學期感知資料模型。
+- 載入與重整時自動讀 cache 並背景同步。
+- 每 30 秒目前學期自動同步，支援 hidden 暫停與 visibility resume。
 - 管理模式最小版 Modal。
 - 查看目前學期資料。
+- 新增學期並自動切換。
+- 複製學期，可選擇複製學生與課程，不複製 attendance。
 - 學生 CSV 預覽、確認匯入與重新同步。
 - 課程 CSV 預覽、確認匯入與重新同步。
 - Google Sheet schema 與 Apps Script setup。

@@ -23,15 +23,18 @@ flowchart LR
 前端啟動流程：
 
 1. 載入內建 `DEFAULT_SEMESTERS`、`DEFAULT_CLASSES`、`DEFAULT_STUDENTS`。
-2. 從 `localStorage` 讀取 API URL、選取中的學期、學期快取與資料快取。
-3. 先嘗試用快取渲染目前學期。
-4. 若有 API URL，呼叫 Apps Script 同步學期、課程、人員與出缺席。
-5. 同步成功後更新畫面並保存快取；失敗則保留本機資料。
+2. 從 `localStorage` 讀取 API URL 覆蓋值、選取中的學期、學期快取與資料快取。
+3. 先嘗試用目前學期快取渲染畫面。
+4. 若 `localStorage` 沒有 API URL，使用程式內建 `DEFAULT_API_URL`，背景呼叫 Apps Script 同步最新資料。
+5. API 回來後若資料有變才重新 render，並保存快取；失敗則保留本機資料。
 
 管理模式最小版內建在同一個 `index.html`：
 
 - 右上角「管理」按鈕會開啟自製 Modal，沒有登入與權限控管。
-- Modal 分為「目前學期」、「學生 CSV」、「課程 CSV」三個分頁。
+- Modal 分為「目前學期」、「學期管理」、「學生 CSV」、「課程 CSV」四個分頁。
+- 學期管理可新增學期，或從既有學期複製學生與課程到新 `semesterId`；不複製 attendance。
+- 新增/複製會檢查 `semesterId` 不可重複、`name` 不可空白，並提示建議格式 `sem-115-up`。
+- 複製前會顯示來源學期預覽：學生幾人、課程幾堂，確認後才寫入。
 - CSV 匯入先在前端解析並預覽；若有必要欄位缺漏或 ID 重複，確認按鈕會停用。
 - 使用者確認後才 POST 到 Apps Script，寫入 Google Sheet，接著重新同步前端資料。
 - 程式內的 `DEFAULT_*` fallback data 不會因匯入而被移除。
@@ -129,14 +132,16 @@ JSONP callback 參數會經 `/^[\w.$]+$/` 驗證，通過時回傳 JavaScript，
 
 `saveAttendance_` 會使用 `LockService.getDocumentLock()` 防止同時寫入。寫入策略是「整個學期替換」：保留其他學期的 attendance，清空目前學期既有 records，再寫入前端送來的全部 records。這代表前端送出前應先同步完整學期資料，避免以不完整本機資料覆蓋該學期。
 
-管理模式新增兩個 POST actions：
+管理模式新增 POST actions：
 
 | Action | Payload | 行為 |
 | --- | --- | --- |
+| `createSemester` | `{ id, name }` | 新增一筆 `semesters` row；會自動從 `sem-115-up` 這類 ID 推得 `year` 與 `term`。 |
+| `cloneSemester` | `{ sourceSemesterId, targetSemesterId, name, copyStudents, copyClasses }` | 建立新學期；依勾選複製來源學期的 students/classes，並把 `semesterId` 改成新學期；不複製 attendance。 |
 | `importStudents` | `{ semesterId, rows }` | 將 `rows` 正規化後寫入 `students` 工作表，只替換同一個 `semesterId` 的學生資料。 |
 | `importClasses` | `{ semesterId, rows }` | 將 `rows` 正規化後寫入 `classes` 工作表，只替換同一個 `semesterId` 的課程資料。 |
 
-匯入 actions 同樣使用 document lock。替換時會保留其他學期資料；沒有 `semesterId` 的舊 rows 會被視為預設學期 `sem-114-down`。
+管理 actions 使用 document lock。匯入與複製時會保留其他學期資料；沒有 `semesterId` 的舊 rows 會被視為預設學期 `sem-114-down`。
 
 CSV 欄位：
 
@@ -176,9 +181,28 @@ CSV 欄位：
 快取策略：
 
 - 啟動時先讀學期快取，再讀目前學期的資料快取。
-- 切換學期時先嘗試渲染該學期快取；若無快取，先顯示空資料集，再背景同步 API。
+- 啟動與重整頁面時都先 render cache，背景再同步 API。
+- 切換學期時先嘗試渲染該學期快取；若無快取，先顯示空資料集，再背景同步該 `semesterId`。
 - API 同步成功或送出報到後，都會呼叫 `saveDataCache()`。
 - API 不可用或儲存失敗時，畫面仍保存本機狀態，`source` 會標記為 `local`。
+
+自動同步策略：
+
+- API URL 來源優先序為 `localStorage.attendanceApiUrl`，其次是程式內建 `DEFAULT_API_URL`；新裝置不需手動設定即可同步。
+- 「設定 API」可讓管理者覆蓋 `DEFAULT_API_URL`，覆蓋值會保存到 `localStorage`；留空會移除覆蓋並恢復預設 URL。
+- 每 30 秒背景同步一次目前選取的學期，只抓該學期的 `classes`、`students`、`attendance`，不重抓所有學期。
+- `document.hidden === true` 時暫停背景同步。
+- `visibilitychange` 回到頁面時，會立刻同步目前學期一次。
+- 若同步正在進行，新同步請求不會重複發出；切換到不同學期時會排入下一次同步。
+- 同步前不阻塞 UI；API 回來後會比較資料 signature，有變才 render。
+
+同步狀態 badge：
+
+- `🔄 同步中`
+- `🟢 已同步`
+- `🟡 使用本機資料`
+- `🔴 同步失敗`
+- `⚪ 尚未設定 API`，僅在沒有覆蓋 URL 且 `DEFAULT_API_URL` 也不可用時出現。
 
 ## Semester-Aware Model
 
@@ -249,6 +273,8 @@ CSV 欄位：
 - 學期下拉選單與 active semester 選取。
 - 管理模式最小版 Modal。
 - 查看目前學期課程、人員與 attendance record 數。
+- 新增學期並自動切換。
+- 複製學期，可選擇複製學生與課程，不複製 attendance。
 - 學生 CSV 匯入預覽、確認寫入與重新同步。
 - 課程 CSV 匯入預覽、確認寫入與重新同步。
 - Google Sheet 四表資料模型。

@@ -120,6 +120,8 @@ function doPost(e) {
     if (action === 'saveAttendance') return respond_(saveAttendance_(body.payload || {}));
     if (action === 'importStudents') return respond_(importStudents_(body.payload || {}));
     if (action === 'importClasses') return respond_(importClasses_(body.payload || {}));
+    if (action === 'createSemester') return respond_(createSemester_(body.payload || {}));
+    if (action === 'cloneSemester') return respond_(cloneSemester_(body.payload || {}));
     return respond_({ ok: false, error: 'Unknown action' });
   } catch (error) {
     return respond_({ ok: false, error: String(error && error.message ? error.message : error) });
@@ -175,6 +177,100 @@ function importClasses_(payload) {
   return replaceSemesterRows_(SHEETS.classes, HEADERS.classes, semesterId, rows);
 }
 
+function createSemester_(payload) {
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+
+  try {
+    const semester = normalizeNewSemester_(payload);
+    const semesters = readSheetObjects_(SHEETS.semesters);
+    assertNewSemester_(semesters, semester.id);
+    writeSheetRows_(SHEETS.semesters, HEADERS.semesters, semesters.concat([semester]));
+    SpreadsheetApp.flush();
+    return { ok: true, semester };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function cloneSemester_(payload) {
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+
+  try {
+    const sourceSemesterId = payload.sourceSemesterId || '';
+    if (!sourceSemesterId) throw new Error('sourceSemesterId is required');
+
+    const semester = normalizeNewSemester_({
+      id: payload.targetSemesterId || payload.id,
+      name: payload.name
+    });
+    const copyStudents = payload.copyStudents !== false;
+    const copyClasses = payload.copyClasses !== false;
+    if (!copyStudents && !copyClasses) throw new Error('Nothing selected to clone');
+
+    const semesters = readSheetObjects_(SHEETS.semesters);
+    const sourceSemester = semesters.find(item => item.id === sourceSemesterId);
+    if (!sourceSemester) throw new Error(`Source semester not found: ${sourceSemesterId}`);
+    assertNewSemester_(semesters, semester.id);
+    writeSheetRows_(SHEETS.semesters, HEADERS.semesters, semesters.concat([semester]));
+
+    let studentCount = 0;
+    let classCount = 0;
+
+    if (copyStudents) {
+      const students = readSheetObjects_(SHEETS.students);
+      const clonedStudents = filterBySemester_(students, sourceSemesterId)
+        .map(row => ({ ...row, semesterId: semester.id }));
+      studentCount = clonedStudents.length;
+      writeSheetRows_(
+        SHEETS.students,
+        HEADERS.students,
+        students.filter(row => semesterIdForRecord_(row) !== semester.id).concat(clonedStudents)
+      );
+    }
+
+    if (copyClasses) {
+      const classes = readSheetObjects_(SHEETS.classes);
+      const clonedClasses = filterBySemester_(classes, sourceSemesterId)
+        .map(row => ({ ...row, semesterId: semester.id }));
+      classCount = clonedClasses.length;
+      writeSheetRows_(
+        SHEETS.classes,
+        HEADERS.classes,
+        classes.filter(row => semesterIdForRecord_(row) !== semester.id).concat(clonedClasses)
+      );
+    }
+
+    SpreadsheetApp.flush();
+    return { ok: true, semester, counts: { students: studentCount, classes: classCount } };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function normalizeNewSemester_(payload) {
+  const id = String(payload.id || '').trim();
+  const name = String(payload.name || '').trim();
+  if (!id) throw new Error('semesterId is required');
+  if (!name) throw new Error('name is required');
+
+  const match = /^sem-(\d{3})-(up|down)$/.exec(id);
+  return {
+    id,
+    name,
+    year: payload.year || (match ? match[1] : ''),
+    term: payload.term || (match ? (match[2] === 'up' ? '上' : '下') : ''),
+    status: payload.status || ''
+  };
+}
+
+function assertNewSemester_(semesters, semesterId) {
+  if (semesters.some(semester => semester.id === semesterId)) {
+    throw new Error(`semesterId already exists: ${semesterId}`);
+  }
+}
+
 function normalizeImportedStudents_(rows, semesterId) {
   return rows
     .map((row, index) => ({
@@ -216,14 +312,7 @@ function replaceSemesterRows_(sheetName, headers, semesterId, incomingRows) {
   try {
     const existingOtherSemesters = readSheetObjects_(sheetName)
       .filter(record => semesterIdForRecord_(record) !== semesterId);
-    const allRows = existingOtherSemesters.concat(incomingRows);
-    const sheet = getSpreadsheet_().getSheetByName(sheetName);
-    const lastRow = sheet.getLastRow();
-
-    if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, headers.length).clearContent();
-    if (allRows.length) {
-      sheet.getRange(2, 1, allRows.length, headers.length).setValues(objectsToValues_(allRows, headers));
-    }
+    writeSheetRows_(sheetName, headers, existingOtherSemesters.concat(incomingRows));
 
     SpreadsheetApp.flush();
     return { ok: true, count: incomingRows.length, semesterId };
@@ -234,6 +323,16 @@ function replaceSemesterRows_(sheetName, headers, semesterId, incomingRows) {
 
 function semesterIdForRecord_(record) {
   return record.semesterId || DEFAULT_SEMESTER_ID;
+}
+
+function writeSheetRows_(sheetName, headers, rows) {
+  const sheet = getSpreadsheet_().getSheetByName(sheetName);
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, headers.length).clearContent();
+  if (rows.length) {
+    sheet.getRange(2, 1, rows.length, headers.length).setValues(objectsToValues_(rows, headers));
+  }
 }
 
 function getSpreadsheet_() {

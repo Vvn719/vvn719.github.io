@@ -51,7 +51,7 @@
         <span class="badge text-bg-light border text-dark align-self-center" id="syncBadge">本機資料</span>
         <button class="btn btn-outline-dark btn-sm" type="button" onclick="openAdminModal()">管理</button>
         <button class="btn btn-outline-secondary btn-sm" type="button" onclick="configureApi()">設定 API</button>
-        <button class="btn btn-outline-primary btn-sm" type="button" onclick="reloadFromApi()">同步</button>
+        <button class="btn btn-outline-primary btn-sm" type="button" onclick="reloadFromApi({ manual: true, force: true })">同步</button>
       </div>
     </div>
   </nav>
@@ -112,6 +112,7 @@
       <div class="admin-body p-3">
         <div class="btn-group w-100 mb-3" role="tablist" aria-label="管理功能">
           <button class="btn btn-outline-primary active" id="adminTab-overview" type="button" onclick="setAdminTab('overview')">目前學期</button>
+          <button class="btn btn-outline-primary" id="adminTab-semesters" type="button" onclick="setAdminTab('semesters')">學期管理</button>
           <button class="btn btn-outline-primary" id="adminTab-students" type="button" onclick="setAdminTab('students')">學生 CSV</button>
           <button class="btn btn-outline-primary" id="adminTab-classes" type="button" onclick="setAdminTab('classes')">課程 CSV</button>
         </div>
@@ -120,6 +121,59 @@
 
         <section class="admin-tab-panel active" id="adminPanel-overview">
           <div id="adminOverview"></div>
+        </section>
+
+        <section class="admin-tab-panel" id="adminPanel-semesters">
+          <div class="row g-3">
+            <div class="col-12 col-xl-6">
+              <div class="border rounded p-3 h-100">
+                <h6 class="fw-bold mb-3">新增學期</h6>
+                <div class="mb-3">
+                  <label class="form-label" for="newSemesterIdInput">semesterId</label>
+                  <input class="form-control" id="newSemesterIdInput" placeholder="sem-115-up" oninput="validateCreateSemesterForm()">
+                  <div class="form-text">建議格式：sem-115-up</div>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label" for="newSemesterNameInput">name</label>
+                  <input class="form-control" id="newSemesterNameInput" placeholder="115上培緣" oninput="validateCreateSemesterForm()">
+                </div>
+                <div id="createSemesterPreview" class="mb-3"></div>
+                <button class="btn btn-success w-100" id="createSemesterButton" type="button" onclick="confirmCreateSemester()" disabled>確認新增學期</button>
+              </div>
+            </div>
+
+            <div class="col-12 col-xl-6">
+              <div class="border rounded p-3 h-100">
+                <h6 class="fw-bold mb-3">複製學期</h6>
+                <div class="mb-3">
+                  <label class="form-label" for="cloneSourceSemesterSelect">來源 semester</label>
+                  <select class="form-select" id="cloneSourceSemesterSelect" onchange="renderCloneSemesterPreview()"></select>
+                </div>
+                <div class="row g-3">
+                  <div class="col-12 col-md-6">
+                    <label class="form-label" for="cloneSemesterIdInput">新 semesterId</label>
+                    <input class="form-control" id="cloneSemesterIdInput" placeholder="sem-115-up" oninput="renderCloneSemesterPreview()">
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label" for="cloneSemesterNameInput">新 name</label>
+                    <input class="form-control" id="cloneSemesterNameInput" placeholder="115上培緣" oninput="renderCloneSemesterPreview()">
+                  </div>
+                </div>
+                <div class="d-flex gap-3 my-3">
+                  <div class="form-check">
+                    <input class="form-check-input" id="cloneStudentsCheckbox" type="checkbox" checked onchange="renderCloneSemesterPreview()">
+                    <label class="form-check-label" for="cloneStudentsCheckbox">複製學生</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" id="cloneClassesCheckbox" type="checkbox" checked onchange="renderCloneSemesterPreview()">
+                    <label class="form-check-label" for="cloneClassesCheckbox">複製課程</label>
+                  </div>
+                </div>
+                <div id="cloneSemesterPreview" class="mb-3"></div>
+                <button class="btn btn-success w-100" id="cloneSemesterButton" type="button" onclick="confirmCloneSemester()" disabled>確認複製學期</button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section class="admin-tab-panel" id="adminPanel-students">
@@ -243,12 +297,18 @@
     const SEMESTERS_CACHE_KEY = 'attendanceSemestersCache:v2';
     const DATA_CACHE_PREFIX = 'attendanceDataCache:v2';
     const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbyuTmdc2cC_zqzP6AOiY5fn_qNduFjseDGs0KuY3m7R5ijQ9fFTred8vB-TmspdciHgDw/exec';
+    const AUTO_SYNC_INTERVAL_MS = 30000;
     let apiUrl = localStorage.getItem(API_URL_STORAGE_KEY) || DEFAULT_API_URL;
     let currentSemesterId = localStorage.getItem(SELECTED_SEMESTER_STORAGE_KEY) || DEFAULT_SEMESTERS[0].id;
+    let syncInFlight = null;
+    let syncInFlightSemesterId = '';
+    let queuedSyncSemesterId = '';
+    let autoSyncTimer = null;
     const adminImportState = {
       students: { rows: [], errors: [], fileName: '' },
       classes: { rows: [], errors: [], fileName: '' }
     };
+    const clonePreviewCache = new Map();
 
     function assignStudentKeys() {
       currentStudents.forEach((student, index) => {
@@ -272,6 +332,20 @@
     function updateSyncBadge(text, style = 'light') {
       syncBadge.className = `badge text-bg-${style} border align-self-center`;
       syncBadge.textContent = text;
+    }
+
+    function setSyncState(state) {
+      const states = {
+        syncing: ['🔄 同步中', 'warning'],
+        synced: ['🟢 已同步', 'success'],
+        local: ['🟡 使用本機資料', 'warning'],
+        failed: ['🔴 同步失敗', 'danger'],
+        unset: ['⚪ 尚未設定 API', 'secondary'],
+        saving: ['🔄 儲存中', 'warning'],
+        saveFailed: ['🔴 儲存失敗', 'danger']
+      };
+      const [text, style] = states[state] || states.local;
+      updateSyncBadge(text, style);
     }
 
     function jsonpRequest(action, params = {}) {
@@ -452,6 +526,7 @@
     }
 
     function applyDataSet(data = {}) {
+      const selectedClassId = currentClass()?.id || '';
       applySemesters(data.semesters || semesters, data.semesterId || currentSemesterId);
 
       currentClasses = (data.classes || [])
@@ -469,6 +544,8 @@
 
       assignStudentKeys();
       initClasses();
+      const nextClassIndex = currentClasses.findIndex(item => item.id === selectedClassId);
+      if (nextClassIndex >= 0) classSelect.value = String(nextClassIndex);
       loadAttendanceRecords(data.records || data.attendance || []);
       restoreStateForSelectedClass();
       renderList();
@@ -524,7 +601,7 @@
       const cached = loadDataCache(semesterId);
       if (!cached) return false;
       applyDataSet({ ...cached, semesterId });
-      updateSyncBadge('使用本機資料', 'secondary');
+      setSyncState(apiUrl ? 'local' : 'unset');
       return true;
     }
 
@@ -554,56 +631,192 @@
       return records;
     }
 
+    function sortedByKeys(items, keys) {
+      return [...items].sort((a, b) => {
+        for (const key of keys) {
+          const left = String(a[key] ?? '');
+          const right = String(b[key] ?? '');
+          if (left !== right) return left.localeCompare(right, 'zh-Hant');
+        }
+        return 0;
+      });
+    }
+
+    function normalizedDataForSignature(data = {}) {
+      const semesterId = data.semesterId || currentSemesterId;
+      const nextSemesters = (data.semesters || semesters).map(normalizeSemester);
+      let nextClasses = (data.classes || [])
+        .filter(item => !item.semesterId || item.semesterId === semesterId)
+        .map((item, index) => ({
+          id: item.id || `class-${index + 1}`,
+          semesterId: item.semesterId || semesterId,
+          date: item.date || '',
+          title: item.title || '',
+          sortOrder: Number(item.sortOrder || index + 1)
+        }))
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+      let nextStudents = (data.students || [])
+        .filter(item => !item.semesterId || item.semesterId === semesterId)
+        .map((item, index) => normalizeStudent(item, index))
+        .filter(item => item.active)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+
+      if (!nextClasses.length && semesterId === DEFAULT_SEMESTERS[0].id) nextClasses = DEFAULT_CLASSES.map((item, index) => ({ ...normalizeClass(item, index), semesterId }));
+      if (!nextStudents.length && semesterId === DEFAULT_SEMESTERS[0].id) nextStudents = DEFAULT_STUDENTS.map((item, index) => normalizeStudent(item, index));
+
+      const classIds = new Set(nextClasses.map(item => item.id));
+      const studentIds = new Set(nextStudents.map(item => item.apiId));
+      const nextAttendance = (data.records || data.attendance || [])
+        .map(item => ({
+          semesterId: item.semesterId || semesterId,
+          classId: item.classId || '',
+          studentId: item.studentId || '',
+          status: item.status || '',
+          note: item.note || ''
+        }))
+        .filter(item => item.semesterId === semesterId && classIds.has(item.classId) && studentIds.has(item.studentId) && item.status);
+
+      return {
+        semesterId,
+        semesters: sortedByKeys(nextSemesters, ['id']),
+        classes: nextClasses.map(item => ({
+          id: item.id,
+          semesterId: item.semesterId || semesterId,
+          date: item.date,
+          title: item.title,
+          sortOrder: item.sortOrder
+        })),
+        students: nextStudents.map(item => ({
+          id: item.apiId,
+          group: item.group,
+          role: item.role,
+          unit: item.unit,
+          name: item.name,
+          studentNo: item.id || '',
+          url: item.url || '#',
+          active: item.active,
+          sortOrder: item.sortOrder,
+          semesterId: item.semesterId || ''
+        })),
+        attendance: sortedByKeys(nextAttendance, ['classId', 'studentId', 'status', 'note'])
+      };
+    }
+
+    function dataSignature(data = {}) {
+      return JSON.stringify(normalizedDataForSignature(data));
+    }
+
+    function currentDataSignature() {
+      return dataSignature({
+        semesterId: currentSemesterId,
+        semesters,
+        classes: currentClasses,
+        students: cacheableStudents(),
+        attendance: attendancePayloadFromRecords()
+      });
+    }
+
     async function persistAttendanceToApi() {
       if (!apiUrl) {
-        updateSyncBadge('使用本機資料', 'secondary');
+        setSyncState('unset');
         return { ok: false, skipped: true };
       }
-      updateSyncBadge('儲存中', 'warning');
+      setSyncState('saving');
       const result = await postApi('saveAttendance', {
         semesterId: currentSemesterId,
         records: attendancePayloadFromRecords()
       });
       if (result && result.ok === false) throw new Error(result.error || 'API save failed');
-      updateSyncBadge('已同步', 'success');
+      setSyncState('synced');
       return result;
     }
 
-    async function reloadFromApi(options = {}) {
+    function shouldSkipBackgroundSync(options = {}) {
+      return options.background && document.hidden;
+    }
+
+    async function performApiSync(options = {}) {
       if (!apiUrl) {
-        configureApi();
-        return;
+        setSyncState('unset');
+        return { ok: false, skipped: true };
       }
 
-      updateSyncBadge('同步中', 'warning');
+      if (shouldSkipBackgroundSync(options)) return { ok: false, skipped: true };
+      setSyncState('syncing');
+
       try {
         const preferredSemesterId = options.semesterId || currentSemesterId;
-        const semesterData = await jsonpRequest('semesters');
-        const nextSemesters = (semesterData.semesters || []).map(normalizeSemester);
-        const requestedSemester = nextSemesters.find(item => item.id === preferredSemesterId);
-        const activeSemester = nextSemesters.find(item => item.status === 'active') || nextSemesters[0];
-        const semesterId = requestedSemester?.id || (options.keepSemester ? preferredSemesterId : activeSemester?.id) || preferredSemesterId;
+        let nextSemesters = semesters;
+        let semesterId = preferredSemesterId;
 
-        applySemesters(nextSemesters.length ? nextSemesters : semesters, semesterId);
+        if (options.includeSemesters) {
+          const semesterData = await jsonpRequest('semesters');
+          nextSemesters = (semesterData.semesters || []).map(normalizeSemester);
+          const requestedSemester = nextSemesters.find(item => item.id === preferredSemesterId);
+          const activeSemester = nextSemesters.find(item => item.status === 'active') || nextSemesters[0];
+          semesterId = requestedSemester?.id || (options.keepSemester ? preferredSemesterId : activeSemester?.id) || preferredSemesterId;
+          applySemesters(nextSemesters.length ? nextSemesters : semesters, semesterId);
+        } else if (semesterId !== currentSemesterId) {
+          currentSemesterId = semesterId;
+          localStorage.setItem(SELECTED_SEMESTER_STORAGE_KEY, currentSemesterId);
+          initSemesters();
+        }
 
-        const classesData = await jsonpRequest('classes', { semesterId: currentSemesterId });
-        const studentsData = await jsonpRequest('students', { semesterId: currentSemesterId });
-        const attendanceData = await jsonpRequest('attendance', { semesterId: currentSemesterId });
-
-        applyDataSet({
-          semesters,
-          semesterId: currentSemesterId,
+        const classesData = await jsonpRequest('classes', { semesterId });
+        const studentsData = await jsonpRequest('students', { semesterId });
+        const attendanceData = await jsonpRequest('attendance', { semesterId });
+        const nextData = {
+          semesters: nextSemesters,
+          semesterId,
           classes: classesData.classes || [],
           students: studentsData.students || [],
           attendance: attendanceData.records || attendanceData.attendance || []
-        });
+        };
+
+        if (dataSignature(nextData) !== currentDataSignature()) {
+          applyDataSet(nextData);
+        }
         saveDataCache('api');
-        updateSyncBadge('已同步', 'success');
+        setSyncState('synced');
+        return { ok: true };
       } catch (error) {
         console.error(error);
-        updateSyncBadge('同步失敗', 'danger');
+        setSyncState('failed');
         if (options.throwOnError) throw error;
+        return { ok: false, error };
       }
+    }
+
+    async function reloadFromApi(options = {}) {
+      const requestedSemesterId = options.semesterId || currentSemesterId;
+      if (!apiUrl) {
+        setSyncState('unset');
+        return { ok: false, skipped: true };
+      }
+      if (shouldSkipBackgroundSync(options)) return { ok: false, skipped: true };
+
+      if (syncInFlight) {
+        if (options.force) {
+          await syncInFlight;
+          return reloadFromApi({ ...options, force: false });
+        }
+        if (requestedSemesterId !== syncInFlightSemesterId) queuedSyncSemesterId = requestedSemesterId;
+        return syncInFlight;
+      }
+
+      syncInFlightSemesterId = requestedSemesterId;
+      syncInFlight = performApiSync({ ...options, semesterId: requestedSemesterId })
+        .finally(() => {
+          syncInFlight = null;
+          syncInFlightSemesterId = '';
+          const queuedSemesterId = queuedSyncSemesterId;
+          queuedSyncSemesterId = '';
+          if (queuedSemesterId && queuedSemesterId !== requestedSemesterId && apiUrl && !document.hidden) {
+            setTimeout(() => reloadFromApi({ semesterId: queuedSemesterId, keepSemester: true, background: true }), 0);
+          }
+        });
+
+      return syncInFlight;
     }
 
     async function switchSemester(semesterId) {
@@ -615,24 +828,33 @@
       const usedCache = renderFromCache(currentSemesterId);
       if (!usedCache) {
         applyDataSet({ semesters, semesterId: currentSemesterId, classes: [], students: [], attendance: [] });
-        updateSyncBadge('使用本機資料', 'secondary');
+        setSyncState(apiUrl ? 'local' : 'unset');
       }
 
-      if (apiUrl) reloadFromApi({ semesterId: currentSemesterId, keepSemester: true });
+      if (apiUrl) reloadFromApi({ semesterId: currentSemesterId, keepSemester: true, background: true });
     }
 
     function configureApi() {
-      const nextUrl = prompt('貼上 Apps Script Web App URL', apiUrl);
+      const nextUrl = prompt('貼上 Apps Script Web App URL（留空恢復預設）', apiUrl || DEFAULT_API_URL);
       if (nextUrl === null) return;
       apiUrl = nextUrl.trim();
 
       if (apiUrl) {
         localStorage.setItem(API_URL_STORAGE_KEY, apiUrl);
-        reloadFromApi({ semesterId: currentSemesterId, keepSemester: true });
+        reloadFromApi({ semesterId: currentSemesterId, keepSemester: true, includeSemesters: true, force: true });
       } else {
         localStorage.removeItem(API_URL_STORAGE_KEY);
-        updateSyncBadge('使用本機資料', 'secondary');
+        apiUrl = DEFAULT_API_URL;
+        reloadFromApi({ semesterId: currentSemesterId, keepSemester: true, includeSemesters: true, force: true });
       }
+    }
+
+    function startAutoSync() {
+      if (autoSyncTimer) clearInterval(autoSyncTimer);
+      autoSyncTimer = setInterval(() => {
+        if (!apiUrl || document.hidden) return;
+        reloadFromApi({ semesterId: currentSemesterId, keepSemester: true, background: true });
+      }, AUTO_SYNC_INTERVAL_MS);
     }
 
     function escapeHtml(value) {
@@ -664,11 +886,12 @@
     }
 
     function setAdminTab(tab) {
-      ['overview', 'students', 'classes'].forEach(item => {
+      ['overview', 'semesters', 'students', 'classes'].forEach(item => {
         document.getElementById(`adminTab-${item}`).classList.toggle('active', item === tab);
         document.getElementById(`adminPanel-${item}`).classList.toggle('active', item === tab);
       });
       if (tab === 'overview') renderAdminOverview();
+      if (tab === 'semesters') renderSemesterAdmin();
     }
 
     function setAdminStatus(text, style = 'light') {
@@ -754,6 +977,220 @@
           { key: 'id', label: 'id / 學號' }
         ], '目前學期沒有學生')}
       `;
+    }
+
+    function semesterExists(semesterId) {
+      return semesters.some(item => item.id === semesterId);
+    }
+
+    function semesterFormatLooksGood(semesterId) {
+      return /^sem-\d{3}-(up|down)$/.test(semesterId);
+    }
+
+    function semesterNameFromId(semesterId) {
+      const match = /^sem-(\d{3})-(up|down)$/.exec(semesterId);
+      if (!match) return '';
+      return `${match[1]}${match[2] === 'up' ? '上' : '下'}培緣`;
+    }
+
+    function semesterPayloadFromInputs(idInputId, nameInputId) {
+      return {
+        id: document.getElementById(idInputId).value.trim(),
+        name: document.getElementById(nameInputId).value.trim()
+      };
+    }
+
+    function semesterFormErrors(payload, options = {}) {
+      const errors = [];
+      if (!payload.id) errors.push('semesterId 不可空白');
+      else {
+        if (semesterExists(payload.id)) errors.push(`semesterId 已存在：${payload.id}`);
+      }
+      if (!payload.name) errors.push('name 不可空白');
+      if (options.requireCloneSelection && !options.copyStudents && !options.copyClasses) errors.push('請至少勾選複製學生或複製課程');
+      return errors;
+    }
+
+    function semesterFormatHint(semesterId) {
+      return semesterId && !semesterFormatLooksGood(semesterId) ? 'semesterId 建議格式：sem-115-up' : '';
+    }
+
+    function renderSemesterValidation(targetId, payload, errors, details = '') {
+      const target = document.getElementById(targetId);
+      if (errors.length) {
+        target.innerHTML = `<div class="alert alert-danger py-2 mb-0"><ul class="mb-0">${errors.map(error => `<li>${escapeHtml(error)}</li>`).join('')}</ul></div>`;
+        return;
+      }
+
+      const hint = semesterFormatHint(payload.id);
+      target.innerHTML = `
+        <div class="alert alert-success py-2 mb-0">
+          <div class="fw-bold">${escapeHtml(payload.id)} / ${escapeHtml(payload.name)}</div>
+          ${hint ? `<div class="small text-warning mt-1">${escapeHtml(hint)}</div>` : ''}
+          ${details ? `<div class="small mt-1">${details}</div>` : ''}
+        </div>`;
+    }
+
+    function validateCreateSemesterForm() {
+      const payload = semesterPayloadFromInputs('newSemesterIdInput', 'newSemesterNameInput');
+      if (payload.id && !payload.name) {
+        const suggestedName = semesterNameFromId(payload.id);
+        if (suggestedName) document.getElementById('newSemesterNameInput').placeholder = suggestedName;
+      }
+      const errors = semesterFormErrors(payload);
+      renderSemesterValidation('createSemesterPreview', payload, errors, '將新增一筆 semesters row，不會建立學生、課程或 attendance。');
+      document.getElementById('createSemesterButton').disabled = Boolean(errors.length);
+    }
+
+    function renderSemesterOptions() {
+      const options = semesters
+        .map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name || item.id)} (${escapeHtml(item.id)})</option>`)
+        .join('');
+      const cloneSelect = document.getElementById('cloneSourceSemesterSelect');
+      cloneSelect.innerHTML = options;
+      if (semesters.some(item => item.id === currentSemesterId)) cloneSelect.value = currentSemesterId;
+    }
+
+    function renderSemesterAdmin() {
+      renderSemesterOptions();
+      validateCreateSemesterForm();
+      renderCloneSemesterPreview();
+    }
+
+    async function sourceSemesterCounts(semesterId) {
+      if (!semesterId) return { students: 0, classes: 0 };
+      if (clonePreviewCache.has(semesterId)) return clonePreviewCache.get(semesterId);
+
+      if (!apiUrl) return { students: 0, classes: 0 };
+      const studentsData = await jsonpRequest('students', { semesterId });
+      const classesData = await jsonpRequest('classes', { semesterId });
+      const counts = {
+        students: (studentsData.students || []).length,
+        classes: (classesData.classes || []).length
+      };
+      clonePreviewCache.set(semesterId, counts);
+      return counts;
+    }
+
+    async function renderCloneSemesterPreview() {
+      const sourceSemesterId = document.getElementById('cloneSourceSemesterSelect').value;
+      const payload = semesterPayloadFromInputs('cloneSemesterIdInput', 'cloneSemesterNameInput');
+      if (payload.id && !payload.name) {
+        const suggestedName = semesterNameFromId(payload.id);
+        if (suggestedName) document.getElementById('cloneSemesterNameInput').placeholder = suggestedName;
+      }
+      const copyStudents = document.getElementById('cloneStudentsCheckbox').checked;
+      const copyClasses = document.getElementById('cloneClassesCheckbox').checked;
+      const errors = semesterFormErrors(payload, { requireCloneSelection: true, copyStudents, copyClasses });
+      const button = document.getElementById('cloneSemesterButton');
+
+      if (!sourceSemesterId) errors.push('請選擇來源 semester');
+      button.disabled = true;
+
+      if (errors.length) {
+        renderSemesterValidation('cloneSemesterPreview', payload, errors);
+        return;
+      }
+
+      document.getElementById('cloneSemesterPreview').innerHTML = '<div class="alert alert-warning py-2 mb-0">讀取來源學期預覽中...</div>';
+
+      try {
+        const counts = await sourceSemesterCounts(sourceSemesterId);
+        const details = [
+          `來源：${escapeHtml(sourceSemesterId)}`,
+          copyStudents ? `將複製學生 ${counts.students} 人` : '不複製學生',
+          copyClasses ? `將複製課程 ${counts.classes} 堂` : '不複製課程',
+          '不複製 attendance'
+        ].join('；');
+        renderSemesterValidation('cloneSemesterPreview', payload, [], details);
+        button.disabled = false;
+      } catch (error) {
+        console.error(error);
+        renderSemesterValidation('cloneSemesterPreview', payload, [`讀取來源學期失敗：${error.message}`]);
+      }
+    }
+
+    async function syncToSemester(semesterId) {
+      currentSemesterId = semesterId;
+      localStorage.setItem(SELECTED_SEMESTER_STORAGE_KEY, currentSemesterId);
+      clonePreviewCache.clear();
+      await reloadFromApi({ semesterId, keepSemester: true, includeSemesters: true, force: true, throwOnError: true });
+      renderAdminOverview();
+      renderSemesterAdmin();
+    }
+
+    async function confirmCreateSemester() {
+      const payload = semesterPayloadFromInputs('newSemesterIdInput', 'newSemesterNameInput');
+      const errors = semesterFormErrors(payload);
+      validateCreateSemesterForm();
+      if (errors.length) return;
+      if (!confirm(`確定新增學期「${payload.name}」？\nsemesterId：${payload.id}`)) return;
+
+      const button = document.getElementById('createSemesterButton');
+      button.disabled = true;
+      setAdminStatus('新增學期中', 'warning');
+
+      try {
+        const result = await postApi('createSemester', payload);
+        if (result && result.ok === false) throw new Error(result.error || '新增學期失敗');
+        await syncToSemester(payload.id);
+        document.getElementById('newSemesterIdInput').value = '';
+        document.getElementById('newSemesterNameInput').value = '';
+        validateCreateSemesterForm();
+        setAdminStatus(`已新增並切換到 ${payload.name}`, 'success');
+      } catch (error) {
+        console.error(error);
+        setAdminStatus(`新增學期失敗：${error.message}`, 'danger');
+        validateCreateSemesterForm();
+      }
+    }
+
+    async function confirmCloneSemester() {
+      const sourceSemesterId = document.getElementById('cloneSourceSemesterSelect').value;
+      const payload = semesterPayloadFromInputs('cloneSemesterIdInput', 'cloneSemesterNameInput');
+      const copyStudents = document.getElementById('cloneStudentsCheckbox').checked;
+      const copyClasses = document.getElementById('cloneClassesCheckbox').checked;
+      const errors = semesterFormErrors(payload, { requireCloneSelection: true, copyStudents, copyClasses });
+      if (!sourceSemesterId) errors.push('請選擇來源 semester');
+      if (errors.length) {
+        renderSemesterValidation('cloneSemesterPreview', payload, errors);
+        return;
+      }
+
+      let counts;
+      try {
+        counts = await sourceSemesterCounts(sourceSemesterId);
+      } catch (error) {
+        console.error(error);
+        renderSemesterValidation('cloneSemesterPreview', payload, [`讀取來源學期失敗：${error.message}`]);
+        return;
+      }
+      const studentText = copyStudents ? `學生 ${counts.students} 人` : '不複製學生';
+      const classText = copyClasses ? `課程 ${counts.classes} 堂` : '不複製課程';
+      if (!confirm(`確定複製學期？\n來源：${sourceSemesterId}\n新學期：${payload.id} / ${payload.name}\n${studentText}，${classText}\n不會複製 attendance。`)) return;
+
+      const button = document.getElementById('cloneSemesterButton');
+      button.disabled = true;
+      setAdminStatus('複製學期中', 'warning');
+
+      try {
+        const result = await postApi('cloneSemester', {
+          sourceSemesterId,
+          targetSemesterId: payload.id,
+          name: payload.name,
+          copyStudents,
+          copyClasses
+        });
+        if (result && result.ok === false) throw new Error(result.error || '複製學期失敗');
+        await syncToSemester(payload.id);
+        document.getElementById('cloneSemesterIdInput').value = '';
+        document.getElementById('cloneSemesterNameInput').value = '';
+        setAdminStatus(`已複製並切換到 ${payload.name}`, 'success');
+      } catch (error) {
+        console.error(error);
+        setAdminStatus(`複製學期失敗：${error.message}`, 'danger');
+        renderCloneSemesterPreview();
+      }
     }
 
     function canonicalCsvHeader(value) {
@@ -1568,7 +2005,7 @@
         console.error(error);
         saveFailed = true;
         cacheSource = 'local';
-        updateSyncBadge('儲存失敗', 'danger');
+        setSyncState('saveFailed');
       }
       saveDataCache(cacheSource);
       renderList();
@@ -1597,17 +2034,27 @@
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && document.getElementById('adminModal').classList.contains('show')) closeAdminModal();
     });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && apiUrl) {
+        reloadFromApi({ semesterId: currentSemesterId, keepSemester: true, background: true });
+      }
+    });
     loadCachedSemesters();
     initClasses();
     initSemesters();
     runSelfTests();
     const usedCache = renderFromCache(currentSemesterId);
     if (apiUrl) {
-      reloadFromApi({ semesterId: currentSemesterId, keepSemester: true });
+      if (!usedCache) {
+        setSyncState('local');
+        renderList();
+      }
+      reloadFromApi({ semesterId: currentSemesterId, keepSemester: true, includeSemesters: true, background: true });
     } else if (!usedCache) {
-      updateSyncBadge('使用本機資料', 'secondary');
+      setSyncState('unset');
       renderList();
     }
+    startAutoSync();
   </script>
 </body>
 </html>
