@@ -172,7 +172,8 @@
     const classSelect = document.getElementById('classSelect');
     const syncBadge = document.getElementById('syncBadge');
     const API_URL_STORAGE_KEY = 'attendanceApiUrl';
-    let apiUrl = localStorage.getItem(API_URL_STORAGE_KEY) || '';
+    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbyuTmdc2cC_zqzP6AOiY5fn_qNduFjseDGs0KuY3m7R5ijQ9fFTred8vB-TmspdciHgDw/exec';
+    let apiUrl = localStorage.getItem(API_URL_STORAGE_KEY) || DEFAULT_API_URL;
     let currentSemesterId = 'sem-114-down';
 
     function assignStudentKeys() {
