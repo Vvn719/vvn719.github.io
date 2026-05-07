@@ -37,6 +37,11 @@
     <div class="container">
       <span class="navbar-brand fw-bold">34期培緣班報到</span>
       <span class="badge text-bg-primary" id="countBadge">已出席 0 人</span>
+      <div class="d-flex gap-2 ms-auto">
+        <span class="badge text-bg-light border text-dark align-self-center" id="syncBadge">本機資料</span>
+        <button class="btn btn-outline-secondary btn-sm" type="button" onclick="configureApi()">設定 API</button>
+        <button class="btn btn-outline-primary btn-sm" type="button" onclick="reloadFromApi()">同步</button>
+      </div>
     </div>
   </nav>
 
@@ -88,7 +93,7 @@
   </main>
 
   <script>
-    const classes = [
+    const DEFAULT_CLASSES = [
       { date: '5/17', title: '一貫道宗旨' },
       { date: '5/24', title: '新世紀健康飲食' },
       { date: '5/30（六）', title: '認識基礎忠恕道場' },
@@ -96,7 +101,7 @@
       { date: '6/14', title: '結班' }
     ];
 
-    const students = [
+    const DEFAULT_STUDENTS = [
       { group: '講師', role: '指導點傳師', unit: '啟化', name: '陳昭湘', id: '', url: '#' },
       { group: '講師', role: '主班講師', unit: '瑞周天曉天恆', name: '何明達', id: '', url: '#' },
       { group: '講師', role: '主班講師', unit: '瑞周天曉天密', name: '許繼嘉', id: '', url: '#' },
@@ -148,6 +153,9 @@
       { group: '三組', role: '學員', unit: '瑞周全真天如', name: '邱瑀宸', id: '', url: '#' }
     ];
 
+    let classes = DEFAULT_CLASSES.map((item, index) => ({ ...item, id: item.id || `class-${index + 1}`, sortOrder: index + 1 }));
+    let students = DEFAULT_STUDENTS.map((item, index) => ({ ...item, apiId: item.apiId || `student-${String(index + 1).padStart(3, '0')}`, sortOrder: index + 1, active: true }));
+
     const GROUPS = ['講師', '一組', '二組', '三組'];
     const selected = new Set();
     const confirmed = new Set();
@@ -162,15 +170,258 @@
     const listEl = document.getElementById('studentList');
     const searchEl = document.getElementById('searchInput');
     const classSelect = document.getElementById('classSelect');
+    const syncBadge = document.getElementById('syncBadge');
+    const API_URL_STORAGE_KEY = 'attendanceApiUrl';
+    let apiUrl = localStorage.getItem(API_URL_STORAGE_KEY) || '';
+    let currentSemesterId = 'sem-114-down';
 
-    students.forEach((student, index) => { student.key = `${student.group}-${student.role}-${student.name}-${index}`; });
+    function assignStudentKeys() {
+      students.forEach((student, index) => {
+        student.key = student.apiId || `${student.group}-${student.role}-${student.name}-${index}`;
+      });
+    }
+
+    assignStudentKeys();
 
     function initClasses() { classSelect.innerHTML = classes.map((item, index) => `<option value="${index}">${item.date}　${item.title}</option>`).join(''); }
+    function updateSyncBadge(text, style = 'light') {
+      syncBadge.className = `badge text-bg-${style} border align-self-center`;
+      syncBadge.textContent = text;
+    }
+
+    function jsonpRequest(action, params = {}) {
+      if (!apiUrl) return Promise.reject(new Error('API URL is not set'));
+      return new Promise((resolve, reject) => {
+        const callbackName = `attendanceApi_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const script = document.createElement('script');
+        const url = new URL(apiUrl);
+        url.searchParams.set('action', action);
+        url.searchParams.set('callback', callbackName);
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value);
+        });
+
+        const timeout = setTimeout(() => {
+          cleanup();
+          reject(new Error('API request timed out'));
+        }, 15000);
+
+        function cleanup() {
+          clearTimeout(timeout);
+          delete window[callbackName];
+          script.remove();
+        }
+
+        window[callbackName] = data => {
+          cleanup();
+          if (data && data.ok === false) reject(new Error(data.error || 'API error'));
+          else resolve(data);
+        };
+
+        script.onerror = () => {
+          cleanup();
+          reject(new Error('API request failed'));
+        };
+
+        script.src = url.toString();
+        document.body.appendChild(script);
+      });
+    }
+
+    async function postApi(action, payload) {
+      if (!apiUrl) return { ok: false, skipped: true };
+      const url = new URL(apiUrl);
+      url.searchParams.set('action', action);
+      const body = JSON.stringify({ action, payload });
+
+      try {
+        const response = await fetch(url.toString(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body
+        });
+        const text = await response.text();
+        return text ? JSON.parse(text) : { ok: response.ok };
+      } catch (error) {
+        await fetch(url.toString(), {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body
+        });
+        return { ok: true, opaque: true };
+      }
+    }
+
+    function normalizeClass(item, index) {
+      return {
+        id: item.id || `class-${index + 1}`,
+        semesterId: item.semesterId || currentSemesterId,
+        date: item.date || '',
+        title: item.title || '',
+        sortOrder: Number(item.sortOrder || index + 1)
+      };
+    }
+
+    function normalizeStudent(item, index) {
+      const activeValue = String(item.active ?? 'TRUE').trim().toLowerCase();
+      return {
+        apiId: item.id || item.apiId || `student-${String(index + 1).padStart(3, '0')}`,
+        group: item.group || '',
+        role: item.role || '',
+        unit: item.unit || '',
+        name: item.name || '',
+        id: item.studentNo || item.idNo || '',
+        url: item.url || '#',
+        active: !['false', '0', 'no', '否', '停用'].includes(activeValue),
+        sortOrder: Number(item.sortOrder || index + 1)
+      };
+    }
+
+    function resetWorkingAttendanceState() {
+      selected.clear();
+      confirmed.clear();
+      excluded.clear();
+      specialNotes.clear();
+      editingAbsent.clear();
+      editingDone.clear();
+      advancedOpen.clear();
+    }
+
+    function restoreStateForSelectedClass() {
+      resetWorkingAttendanceState();
+      const record = attendanceRecords.get(classRecordKey());
+
+      if (record) {
+        record.forEach((item, key) => {
+          if (item.status === 'excluded') {
+            excluded.add(key);
+            return;
+          }
+
+          if (['present', 'online', 'late'].includes(item.status)) {
+            selected.add(key);
+            confirmed.add(key);
+          }
+
+          if (item.status === 'online') specialNotes.set(key, { type: 'online', note: item.note });
+          if (item.status === 'late') specialNotes.set(key, { type: 'late', note: item.note });
+          if (item.status === 'absent') specialNotes.set(key, { type: 'absent', note: item.note });
+        });
+      }
+    }
+
+    function loadAttendanceRecords(records = []) {
+      attendanceRecords.clear();
+      records.forEach(item => {
+        const classIndex = classIndexById(item.classId);
+        const student = students.find(candidate => candidate.apiId === item.studentId || candidate.key === item.studentId);
+        if (classIndex < 0 || !student) return;
+        const recordKey = classRecordKey(classIndex);
+        const record = new Map(attendanceRecords.get(recordKey) || []);
+        record.set(student.key, { status: item.status, note: item.note || '' });
+        attendanceRecords.set(recordKey, record);
+      });
+    }
+
+    async function loadAttendanceFromApi() {
+      const data = await jsonpRequest('attendance', { semesterId: currentSemesterId });
+      loadAttendanceRecords(data.records || data.attendance || []);
+    }
+
+    function attendancePayloadFromRecords() {
+      const records = [];
+      attendanceRecords.forEach((record, recordKey) => {
+        const classItem = classes[Number(recordKey)];
+        if (!classItem) return;
+
+        record.forEach((item, key) => {
+          const student = students.find(candidate => candidate.key === key);
+          if (!student || !item.status) return;
+          records.push({
+            semesterId: currentSemesterId,
+            classId: classItem.id,
+            studentId: student.apiId || student.key,
+            status: item.status,
+            note: item.note || ''
+          });
+        });
+      });
+      return records;
+    }
+
+    async function persistAttendanceToApi() {
+      if (!apiUrl) return { ok: false, skipped: true };
+      updateSyncBadge('儲存中', 'warning');
+      const result = await postApi('saveAttendance', {
+        semesterId: currentSemesterId,
+        records: attendancePayloadFromRecords()
+      });
+      if (result && result.ok === false) throw new Error(result.error || 'API save failed');
+      updateSyncBadge('Google Sheet', 'success');
+      return result;
+    }
+
+    async function reloadFromApi() {
+      if (!apiUrl) {
+        configureApi();
+        return;
+      }
+
+      updateSyncBadge('同步中', 'warning');
+      try {
+        const data = await jsonpRequest('bootstrap');
+        const semesters = data.semesters || [];
+        const activeSemester = semesters.find(item => item.status === 'active') || semesters[0];
+        if (activeSemester?.id) currentSemesterId = activeSemester.id;
+
+        classes = (data.classes || [])
+          .filter(item => !item.semesterId || item.semesterId === currentSemesterId)
+          .map(normalizeClass)
+          .sort((a, b) => a.sortOrder - b.sortOrder);
+        students = (data.students || [])
+          .map(normalizeStudent)
+          .filter(item => item.active)
+          .sort((a, b) => a.sortOrder - b.sortOrder);
+
+        if (!classes.length) classes = DEFAULT_CLASSES.map(normalizeClass);
+        if (!students.length) students = DEFAULT_STUDENTS.map(normalizeStudent);
+
+        assignStudentKeys();
+        initClasses();
+        await loadAttendanceFromApi();
+        restoreStateForSelectedClass();
+        renderList();
+        updateSyncBadge('Google Sheet', 'success');
+      } catch (error) {
+        console.error(error);
+        updateSyncBadge('同步失敗', 'danger');
+        alert('讀取 Google Sheet API 失敗，已保留目前資料。');
+      }
+    }
+
+    function configureApi() {
+      const nextUrl = prompt('貼上 Apps Script Web App URL', apiUrl);
+      if (nextUrl === null) return;
+      apiUrl = nextUrl.trim();
+
+      if (apiUrl) {
+        localStorage.setItem(API_URL_STORAGE_KEY, apiUrl);
+        reloadFromApi();
+      } else {
+        localStorage.removeItem(API_URL_STORAGE_KEY);
+        updateSyncBadge('本機資料', 'light');
+      }
+    }
+
     function pct(actual, total) { if (!total) return '0%'; return `${Math.round((actual / total) * 100)}%`; }
     function findStudent(key) { return students.find(student => student.key === key); }
     function classEndColumn() { return 5 + classes.length * 3; }
     function summaryStartColumn() { return classEndColumn() + 2; }
     function totalExportColumns() { return summaryStartColumn() + 2; }
+    function classRecordKey(index = classSelect.value || 0) { return String(index); }
+    function currentClass() { return classes[Number(classSelect.value || 0)] || classes[0]; }
+    function classIndexById(classId) { return classes.findIndex(item => item.id === classId); }
     function isExcluded(student) { return Boolean(student && excluded.has(student.key)); }
     function isPresent(student) { if (!student || isExcluded(student)) return false; const special = specialNotes.get(student.key); return selected.has(student.key) || special?.type === 'online' || special?.type === 'late'; }
     function isAbsent(student) { if (!student || isExcluded(student)) return false; return specialNotes.get(student.key)?.type === 'absent'; }
@@ -693,7 +944,7 @@
       }
     }
 
-    function submitAttendance() {
+    async function submitAttendance() {
       const checkedStudents = students.filter(isPresent);
       const pendingStudents = checkedStudents.filter(student => !confirmed.has(student.key));
       if (!checkedStudents.length) { alert('請先勾選有來的人'); return; }
@@ -717,8 +968,17 @@
         if (!student.url || student.url === '#') return;
         setTimeout(() => window.open(student.url, '_blank'), index * 800);
       });
+      let saveFailed = false;
+      try {
+        await persistAttendanceToApi();
+      } catch (error) {
+        console.error(error);
+        saveFailed = true;
+        updateSyncBadge('儲存失敗', 'danger');
+      }
       renderList();
-      alert(pendingStudents.length ? `已送出 ${pendingStudents.length} 人報到。` : '目前沒有新增報到人員。');
+      const message = pendingStudents.length ? `已送出 ${pendingStudents.length} 人報到。` : '目前沒有新增報到人員。';
+      alert(saveFailed ? `${message}\n本機已更新，但 Google Sheet 儲存失敗，請再按一次送出或同步後確認。` : message);
     }
 
     function runSelfTests() {
@@ -735,48 +995,16 @@
 
     searchEl.addEventListener('input', renderList);
     classSelect.addEventListener('change', () => {
-      selected.clear();
-      confirmed.clear();
-      specialNotes.clear();
-      editingAbsent.clear();
-      editingDone.clear();
-      advancedOpen.clear();
-      excluded.clear();
-
-      const classIndex = String(classSelect.value || 0);
-      const record = attendanceRecords.get(classIndex);
-
-      if (record) {
-        record.forEach((item, key) => {
-          if (item.status === 'excluded') {
-            excluded.add(key);
-            return;
-          }
-
-          if (['present', 'online', 'late'].includes(item.status)) {
-            selected.add(key);
-            confirmed.add(key);
-          }
-
-          if (item.status === 'online') {
-            specialNotes.set(key, { type: 'online', note: item.note });
-          }
-
-          if (item.status === 'late') {
-            specialNotes.set(key, { type: 'late', note: item.note });
-          }
-
-          if (item.status === 'absent') {
-            specialNotes.set(key, { type: 'absent', note: item.note });
-          }
-        });
-      }
-
+      restoreStateForSelectedClass();
       renderList();
     });
     initClasses();
     runSelfTests();
-    renderList();
+    if (apiUrl) reloadFromApi();
+    else {
+      updateSyncBadge('本機資料', 'light');
+      renderList();
+    }
   </script>
 </body>
 </html>
