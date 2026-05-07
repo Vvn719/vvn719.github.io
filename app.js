@@ -86,8 +86,8 @@ const DEFAULT_SEMESTERS = [
     const SELECTED_SEMESTER_STORAGE_KEY = 'attendanceSelectedSemesterId';
     const SEMESTERS_CACHE_KEY = 'attendanceSemestersCache:v2';
     const DATA_CACHE_PREFIX = 'attendanceDataCache:v2';
-    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbyuTmdc2cC_zqzP6AOiY5fn_qNduFjseDGs0KuY3m7R5ijQ9fFTred8vB-TmspdciHgDw/exec';
-    let apiUrl = localStorage.getItem(API_URL_STORAGE_KEY) || DEFAULT_API_URL;
+    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbwC1JizzXLgOrBRORYtcv1zIhYMkUO4mbdjaK8xC2QHKdvHX6Od35JElERQRc-JcGUngQ/exec';
+    let apiUrl = resolveApiUrl();
     let currentSemesterId = localStorage.getItem(SELECTED_SEMESTER_STORAGE_KEY) || DEFAULT_SEMESTERS[0].id;
     let syncInFlight = null;
     let syncInFlightSemesterId = '';
@@ -97,6 +97,17 @@ const DEFAULT_SEMESTERS = [
       classes: { rows: [], errors: [], fileName: '' }
     };
     const clonePreviewCache = new Map();
+
+    function normalizeApiUrl(value) {
+      const url = String(value || '').trim();
+      if (!url) return '';
+      if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec(?:[?#].*)?$/.test(url)) return '';
+      return url;
+    }
+
+    function resolveApiUrl() {
+      return normalizeApiUrl(localStorage.getItem(API_URL_STORAGE_KEY)) || DEFAULT_API_URL;
+    }
 
     function assignStudentKeys() {
       currentStudents.forEach((student, index) => {
@@ -645,18 +656,26 @@ const DEFAULT_SEMESTERS = [
     }
 
     function configureApi() {
-      const nextUrl = prompt('貼上 Apps Script Web App URL（留空恢復預設）', apiUrl || DEFAULT_API_URL);
+      const nextUrl = prompt('貼上 Apps Script Web App URL（必須是 /exec；留空恢復預設）', apiUrl || DEFAULT_API_URL);
       if (nextUrl === null) return;
-      apiUrl = nextUrl.trim();
 
-      if (apiUrl) {
-        localStorage.setItem(API_URL_STORAGE_KEY, apiUrl);
-        reloadFromApi({ semesterId: currentSemesterId, keepSemester: true, includeSemesters: true, force: true });
-      } else {
+      const trimmedUrl = nextUrl.trim();
+      if (!trimmedUrl) {
         localStorage.removeItem(API_URL_STORAGE_KEY);
         apiUrl = DEFAULT_API_URL;
         reloadFromApi({ semesterId: currentSemesterId, keepSemester: true, includeSemesters: true, force: true });
+        return;
       }
+
+      const normalizedUrl = normalizeApiUrl(trimmedUrl);
+      if (!normalizedUrl) {
+        alert('API URL 格式不正確，請貼上 Apps Script Web App 的 /exec 網址，不是部署作業 ID。');
+        return;
+      }
+
+      apiUrl = normalizedUrl;
+      localStorage.setItem(API_URL_STORAGE_KEY, apiUrl);
+      reloadFromApi({ semesterId: currentSemesterId, keepSemester: true, includeSemesters: true, force: true });
     }
 
 
