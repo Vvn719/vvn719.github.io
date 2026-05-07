@@ -168,6 +168,9 @@
     function initClasses() { classSelect.innerHTML = classes.map((item, index) => `<option value="${index}">${item.date}　${item.title}</option>`).join(''); }
     function pct(actual, total) { if (!total) return '0%'; return `${Math.round((actual / total) * 100)}%`; }
     function findStudent(key) { return students.find(student => student.key === key); }
+    function classEndColumn() { return 5 + classes.length * 3; }
+    function summaryStartColumn() { return classEndColumn() + 2; }
+    function totalExportColumns() { return summaryStartColumn() + 2; }
     function isExcluded(student) { return Boolean(student && excluded.has(student.key)); }
     function isPresent(student) { if (!student || isExcluded(student)) return false; const special = specialNotes.get(student.key); return selected.has(student.key) || special?.type === 'online' || special?.type === 'late'; }
     function isAbsent(student) { if (!student || isExcluded(student)) return false; return specialNotes.get(student.key)?.type === 'absent'; }
@@ -209,7 +212,7 @@
     function specialBadgeClass(type) { return { online: 'text-bg-info', late: 'text-bg-warning', absent: 'text-bg-secondary' }[type] || 'text-bg-light'; }
 
     function renderStudentStatus(student) {
-      if (isExcluded(student)) return '<span class="badge text-bg-dark">不列入統計</span>';
+      if (isExcluded(student)) return '<span class="badge text-bg-dark">不列入出席</span>';
       const special = specialNotes.get(student.key);
       if (!special) return '<span class="text-muted small">一般出席</span>';
       if (special.type === 'absent') return `<span class="badge ${specialBadgeClass(special.type)}">已請假</span> <span class="small text-muted">${special.note}</span>`;
@@ -277,7 +280,7 @@
                 <span class="small text-muted">(${attendance.presentCount}/${attendance.totalCount})</span>
                 ${confirmed.has(student.key) ? '<span class="badge text-bg-success">已報到</span>' : ''}
                 ${absent ? '<span class="badge text-bg-secondary">已請假</span>' : ''}
-                ${excludedStudent ? '<span class="badge text-bg-dark">不列入統計</span>' : ''}
+                ${excludedStudent ? '<span class="badge text-bg-dark">不列入出席</span>' : ''}
               </div>
               <div class="text-muted unit">${student.unit || '未填單位'}</div>
               ${student.id ? `<div class="text-muted student-id">${student.id}</div>` : ''}
@@ -288,7 +291,7 @@
                 <button type="button" class="btn btn-sm ${special?.type === 'absent' ? 'btn-secondary' : 'btn-outline-secondary'}" ${(isLocked(student) || confirmed.has(student.key) || excludedStudent) ? 'disabled' : ''} onclick="startAbsent('${student.key}', event)">缺席</button>
               </div>
               ${(editingAbsent.has(student.key) || (isEditingDone(student) && absent)) ? `<div class="mt-3 p-2 bg-light rounded border" onclick="event.stopPropagation()"><label class="form-label small fw-bold mb-1">請假理由</label><input class="form-control form-control-sm" id="reason-${student.key}" value="${absent ? (special?.note || '').replace('請假：', '') : ''}" placeholder="例如：家中有事、身體不適"><div class="d-flex gap-2 mt-2"><button type="button" class="btn btn-sm btn-success" onclick="saveAbsent('${student.key}', event)">${absent ? '儲存修改' : '確認缺席'}</button><button type="button" class="btn btn-sm btn-outline-secondary" onclick="cancelAbsentEdit('${student.key}', event)">取消</button></div></div>` : ''}
-              ${isEditingDone(student) ? `<div class="mt-3 pt-2 border-top" onclick="event.stopPropagation()"><button type="button" class="btn btn-link btn-sm text-muted p-0" onclick="toggleAdvanced('${student.key}', event)">其他設定</button>${advancedOpen.has(student.key) ? `<div class="mt-2"><button type="button" class="btn btn-sm ${excludedStudent ? 'btn-dark' : 'btn-outline-dark'}" onclick="toggleExclude('${student.key}', event)">${excludedStudent ? '恢復列入統計' : '不列入統計'}</button></div>` : ''}</div>` : ''}
+              ${isEditingDone(student) ? `<div class="mt-3 pt-2 border-top" onclick="event.stopPropagation()"><button type="button" class="btn btn-link btn-sm text-muted p-0" onclick="toggleAdvanced('${student.key}', event)">其他設定</button>${advancedOpen.has(student.key) ? `<div class="mt-2"><button type="button" class="btn btn-sm ${excludedStudent ? 'btn-dark' : 'btn-outline-dark'}" onclick="toggleExclude('${student.key}', event)">${excludedStudent ? '恢復列入出席' : '不列入出席'}</button></div>` : ''}</div>` : ''}
             </div>
           </div>
         </div></div></div>`;
@@ -373,10 +376,36 @@
 
     function toggleAdvanced(key, event) { event.stopPropagation(); if (advancedOpen.has(key)) advancedOpen.delete(key); else advancedOpen.add(key); renderList(); }
 
+    function setExcludedFromClass(key, classIndex, shouldExclude) {
+      for (let index = classIndex; index < classes.length; index += 1) {
+        const recordKey = String(index);
+        const record = new Map(attendanceRecords.get(recordKey) || []);
+
+        if (shouldExclude) {
+          record.set(key, { status: 'excluded', note: '不列入出席' });
+        } else if (record.get(key)?.status === 'excluded') {
+          record.delete(key);
+        }
+
+        if (record.size) attendanceRecords.set(recordKey, record);
+        else attendanceRecords.delete(recordKey);
+      }
+    }
+
     function toggleExclude(key, event) {
       event.stopPropagation();
-      if (excluded.has(key)) excluded.delete(key);
-      else { excluded.add(key); selected.delete(key); confirmed.delete(key); specialNotes.delete(key); editingAbsent.delete(key); }
+      const classIndex = Number(classSelect.value || 0);
+      if (excluded.has(key)) {
+        excluded.delete(key);
+        setExcludedFromClass(key, classIndex, false);
+      } else {
+        excluded.add(key);
+        setExcludedFromClass(key, classIndex, true);
+        selected.delete(key);
+        confirmed.delete(key);
+        specialNotes.delete(key);
+        editingAbsent.delete(key);
+      }
       editingDone.delete(key);
       advancedOpen.delete(key);
       renderList();
@@ -428,7 +457,7 @@
 
       students.forEach(student => {
         if (excluded.has(student.key)) {
-          record.set(student.key, { status: 'excluded', note: '不列入統計' });
+          record.set(student.key, { status: 'excluded', note: '不列入出席' });
           return;
         }
 
@@ -443,10 +472,11 @@
     }
 
     function excelStatusFor(item) {
-      if (!item || item.status === 'excluded') return '';
+      if (!item) return '';
+      if (item.status === 'excluded') return '△';
       if (item.status === 'absent') return 'X';
-      if (item.status === 'online') return '/';
-      if (item.status === 'late') return 'V';
+      if (item.status === 'late') return '/';
+      if (item.status === 'online') return 'V';
       if (item.status === 'present') return 'V';
       return '';
     }
@@ -456,7 +486,7 @@
       if (item.status === 'absent') return (item.note || '').replace(/^請假：/, '');
       if (item.status === 'online') return '線上';
       if (item.status === 'late') return '遲到';
-      if (item.status === 'excluded') return '不列入統計';
+      if (item.status === 'excluded') return '不列入出席';
       return '';
     }
 
@@ -488,6 +518,23 @@
       };
     }
 
+    function termCounts(people, recordsByClass) {
+      return recordsByClass.reduce((totals, record) => {
+        const counts = attendanceCounts(people, record);
+        totals.expected += counts.expected;
+        totals.actual += counts.actual;
+        return totals;
+      }, { actual: 0, expected: 0 });
+    }
+
+    function writeTermSummaryCells(row, people, recordsByClass) {
+      const { actual, expected } = termCounts(people, recordsByClass);
+      const startCol = summaryStartColumn();
+      row.getCell(startCol).value = actual;
+      row.getCell(startCol + 1).value = Math.max(expected - actual, 0);
+      row.getCell(startCol + 2).value = `${actual}/${expected}`;
+    }
+
     function writeSummaryRow(ws, rowNumber, label, people, recordsByClass, options = {}) {
       const row = ws.getRow(rowNumber);
       row.getCell(1).value = options.rawLabel ? label : `${label}  ( 實到 / 應到 )`;
@@ -500,13 +547,14 @@
         row.getCell(startCol + 1).value = expected;
         row.getCell(startCol + 2).value = rate;
       });
+      writeTermSummaryCells(row, people, recordsByClass);
 
-      for (let col = 1; col <= 5 + classes.length * 3; col += 1) styleCell(row.getCell(col), { fill: options.fill || 'FFFFF2CC', bold: true });
+      for (let col = 1; col <= totalExportColumns(); col += 1) styleCell(row.getCell(col), { fill: options.fill || 'FFFFF2CC', bold: true });
       row.height = 24;
     }
 
     function writeSectionRow(ws, rowNumber, label) {
-      ws.mergeCells(rowNumber, 1, rowNumber, 5 + classes.length * 3);
+      ws.mergeCells(rowNumber, 1, rowNumber, totalExportColumns());
       const cell = ws.getCell(rowNumber, 1);
       cell.value = label;
       cell.font = { bold: true, size: 13 };
@@ -529,10 +577,11 @@
         row.getCell(startCol).value = excelStatusFor(item);
         row.getCell(startCol + 2).value = excelReasonFor(item);
       });
+      writeTermSummaryCells(row, [student], recordsByClass);
 
-      for (let col = 1; col <= 5 + classes.length * 3; col += 1) {
+      for (let col = 1; col <= totalExportColumns(); col += 1) {
         const value = row.getCell(col).value;
-        const fill = value === 'X' ? 'FFF4CCCC' : value === '/' ? 'FFD9EAF7' : null;
+        const fill = value === 'X' ? 'FFF4CCCC' : value === '/' ? 'FFFFF2CC' : value === '△' ? 'FFE7E6E6' : null;
         styleCell(row.getCell(col), { fill, horizontal: col === 3 || col === 5 || col % 3 === 2 ? 'left' : 'center' });
       }
       row.height = 24;
@@ -561,7 +610,8 @@
 
         ws.columns = [
           { width: 16 }, { width: 10 }, { width: 18 }, { width: 10 }, { width: 12 },
-          ...classes.flatMap(() => [{ width: 5 }, { width: 5 }, { width: 16 }])
+          ...classes.flatMap(() => [{ width: 5 }, { width: 5 }, { width: 16 }]),
+          { width: 3 }, { width: 12 }, { width: 12 }, { width: 12 }
         ];
 
         ws.mergeCells(1, 1, 1, 10);
@@ -584,8 +634,16 @@
           ws.getCell(3, startCol + 2).value = '缺席\n事由';
         });
 
+        const summaryStart = summaryStartColumn();
+        ws.getCell(2, summaryStart).value = '應出席次數';
+        ws.getCell(2, summaryStart + 1).value = classes.length;
+        ws.getCell(2, summaryStart + 2).value = '114下';
+        ws.getCell(3, summaryStart).value = '已出席次數';
+        ws.getCell(3, summaryStart + 1).value = '未出席次數';
+        ws.getCell(3, summaryStart + 2).value = '培緣';
+
         for (let row = 2; row <= 3; row += 1) {
-          for (let col = 1; col <= 5 + classes.length * 3; col += 1) {
+          for (let col = 1; col <= totalExportColumns(); col += 1) {
             styleCell(ws.getCell(row, col), { fill: 'FFD9EAD3', bold: row === 3 });
           }
         }
@@ -614,7 +672,7 @@
         writeSummaryRow(ws, rowNumber++, '全學員  ( 實到 / 應到 )、出席率', allMembers, recordsByClass, { rawLabel: true, fill: 'FFD9EAD3' });
         writeSummaryRow(ws, rowNumber++, '總出席率', allClassMembers, recordsByClass, { rawLabel: true, fill: 'FFD9EAD3' });
 
-        for (let col = 1; col <= 5 + classes.length * 3; col += 1) styleCell(ws.getCell(1, col));
+        for (let col = 1; col <= totalExportColumns(); col += 1) styleCell(ws.getCell(1, col));
 
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -642,7 +700,7 @@
       const classIndex = String(classSelect.value || 0);
       const record = new Map();
       students.forEach(student => {
-        if (excluded.has(student.key)) { record.set(student.key, { status: 'excluded', note: '不列入統計' }); return; }
+        if (excluded.has(student.key)) { record.set(student.key, { status: 'excluded', note: '不列入出席' }); return; }
         const special = specialNotes.get(student.key);
         if (special?.type === 'absent') record.set(student.key, { status: 'absent', note: special.note });
         else if (special?.type === 'online') record.set(student.key, { status: 'online', note: special.note });
@@ -683,6 +741,7 @@
       editingAbsent.clear();
       editingDone.clear();
       advancedOpen.clear();
+      excluded.clear();
 
       const classIndex = String(classSelect.value || 0);
       const record = attendanceRecords.get(classIndex);
