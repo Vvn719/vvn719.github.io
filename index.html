@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-Hant">
 
 <head>
@@ -145,6 +145,28 @@
       background: #f8f9fa;
     }
 
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(15, 23, 42, .45);
+      backdrop-filter: blur(3px);
+    }
+
+    .loading-overlay.show {
+      display: flex;
+    }
+
+    .loading-card {
+      min-width: 220px;
+      border-radius: 1rem;
+      background: #fff;
+      box-shadow: 0 1rem 3rem rgba(0, 0, 0, .2);
+    }
+
     @media (max-width: 576px) {
 
       .student-id,
@@ -207,16 +229,16 @@
             <label class="form-label fw-bold">上課日期 / 課程</label>
             <select id="classSelect" class="form-select form-select-lg"></select>
           </div>
-          <div class="col-12 col-lg-5">
+          <!-- <div class="col-12 col-lg-5">
             <label class="form-label fw-bold">搜尋</label>
             <input id="searchInput" class="form-control form-control-lg" placeholder="搜尋姓名、組別、單位、角色">
-          </div>
-          <div class="col-6 col-lg-1 d-grid">
+          </div> -->
+          <!-- <div class="col-6 col-lg-1 d-grid">
             <button class="btn btn-outline-primary btn-lg" type="button" onclick="checkAllVisible()">全選</button>
           </div>
           <div class="col-6 col-lg-2 d-grid">
             <button class="btn btn-outline-secondary btn-lg" type="button" onclick="clearChecks()">清除勾選</button>
-          </div>
+          </div> -->
         </div>
       </div>
     </div>
@@ -235,7 +257,8 @@
         <div class="d-flex flex-column flex-sm-row gap-2">
           <button class="btn btn-outline-success btn-lg btn-wide" id="exportButton" type="button"
             onclick="exportAttendanceExcel()">匯出 Excel</button>
-          <button class="btn btn-success btn-lg btn-wide" type="button" onclick="submitAttendance()">送出報到</button>
+          <button class="btn btn-success btn-lg btn-wide" id="submitAttendanceButton" type="button"
+            onclick="submitAttendance()">送出報到</button>
         </div>
       </div>
     </div>
@@ -364,7 +387,15 @@
     </div>
   </div>
 
-  <script src="./app.js?v=1" defer></script>
+  <div class="loading-overlay" id="loadingOverlay" aria-hidden="true">
+    <div class="loading-card p-4 text-center">
+      <div class="spinner-border text-primary mb-3" role="status" aria-hidden="true"></div>
+      <div class="fw-bold" id="loadingOverlayText">同步中，請稍候...</div>
+    </div>
+  </div>
+
+
+  <script src="./app.js?v=6" defer></script>
 </body>
 
 </html>

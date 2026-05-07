@@ -86,7 +86,7 @@ const DEFAULT_SEMESTERS = [
     const SELECTED_SEMESTER_STORAGE_KEY = 'attendanceSelectedSemesterId';
     const SEMESTERS_CACHE_KEY = 'attendanceSemestersCache:v2';
     const DATA_CACHE_PREFIX = 'attendanceDataCache:v2';
-    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbzF6ygWMq41bf_to4gYg3YWiBhyOiQiC9t8cfEwe28i2fS4hpKUgd7VGQT6ZzFrMos6VQ/exec'
+    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbzF6ygWMq41bf_to4gYg3YWiBhyOiQiC9t8cfEwe28i2fS4hpKUgd7VGQT6ZzFrMos6VQ/exec';
     let apiUrl = resolveApiUrl();
     let currentSemesterId = localStorage.getItem(SELECTED_SEMESTER_STORAGE_KEY) || DEFAULT_SEMESTERS[0].id;
     let syncInFlight = null;
@@ -1794,44 +1794,75 @@ const DEFAULT_SEMESTERS = [
       }
     }
 
+
+    function setSubmitLoading(isLoading, text = '同步中，請稍候...') {
+      const overlay = document.getElementById('loadingOverlay');
+      const overlayText = document.getElementById('loadingOverlayText');
+      const submitButton = document.getElementById('submitAttendanceButton');
+
+      if (overlayText) overlayText.textContent = text;
+      if (overlay) {
+        overlay.classList.toggle('show', isLoading);
+        overlay.setAttribute('aria-hidden', isLoading ? 'false' : 'true');
+      }
+      if (submitButton) submitButton.disabled = isLoading;
+    }
+
     async function submitAttendance() {
       const checkedStudents = currentStudents.filter(isPresent);
       const pendingStudents = checkedStudents.filter(student => !confirmed.has(student.key));
       if (!checkedStudents.length) { alert('請先勾選有來的人'); return; }
-      const classIndex = String(classSelect.value || 0);
-      const record = new Map();
-      currentStudents.forEach(student => {
-        if (excluded.has(student.key)) { record.set(student.key, { status: 'excluded', note: '不列入出席' }); return; }
-        const special = specialNotes.get(student.key);
-        if (special?.type === 'absent') record.set(student.key, { status: 'absent', note: special.note });
-        else if (special?.type === 'online') record.set(student.key, { status: 'online', note: special.note });
-        else if (special?.type === 'late') record.set(student.key, { status: 'late', note: special.note });
-        else if (isPresent(student)) record.set(student.key, { status: 'present', note: '已報到' });
-      });
-      attendanceRecords.set(classIndex, record);
-      checkedStudents.forEach((student, index) => {
-        confirmed.add(student.key);
-        editingDone.delete(student.key);
-        if (!student.url || student.url === '#') return;
-      });
-      pendingStudents.forEach((student, index) => {
-        if (!student.url || student.url === '#') return;
-        setTimeout(() => window.open(student.url, '_blank'), index * 800);
-      });
+
+      setSubmitLoading(true, '同步中，請稍候...');
+
       let saveFailed = false;
       let cacheSource = 'api';
+      let message = pendingStudents.length ? `已送出 ${pendingStudents.length} 人報到。` : '目前沒有新增報到人員。';
+
       try {
-        const result = await persistAttendanceToApi();
-        if (result?.skipped) cacheSource = 'local';
+        const classIndex = String(classSelect.value || 0);
+        const record = new Map();
+        currentStudents.forEach(student => {
+          if (excluded.has(student.key)) { record.set(student.key, { status: 'excluded', note: '不列入出席' }); return; }
+          const special = specialNotes.get(student.key);
+          if (special?.type === 'absent') record.set(student.key, { status: 'absent', note: special.note });
+          else if (special?.type === 'online') record.set(student.key, { status: 'online', note: special.note });
+          else if (special?.type === 'late') record.set(student.key, { status: 'late', note: special.note });
+          else if (isPresent(student)) record.set(student.key, { status: 'present', note: '已報到' });
+        });
+        attendanceRecords.set(classIndex, record);
+
+        checkedStudents.forEach(student => {
+          confirmed.add(student.key);
+          editingDone.delete(student.key);
+        });
+
+        pendingStudents.forEach((student, index) => {
+          if (!student.url || student.url === '#') return;
+          setTimeout(() => window.open(student.url, '_blank'), index * 800);
+        });
+
+        try {
+          const result = await persistAttendanceToApi();
+          if (result?.skipped) cacheSource = 'local';
+          if (result && result.ok === false) throw new Error(result.error || 'API save failed');
+        } catch (error) {
+          console.warn(error);
+          saveFailed = true;
+          cacheSource = 'local';
+          setSyncState('saveFailed');
+        }
+
+        saveDataCache(cacheSource);
+        renderList();
       } catch (error) {
         console.error(error);
         saveFailed = true;
-        cacheSource = 'local';
-        setSyncState('saveFailed');
+        message = `送出報到時發生錯誤：${error.message}`;
+      } finally {
+        setSubmitLoading(false);
       }
-      saveDataCache(cacheSource);
-      renderList();
-      const message = pendingStudents.length ? `已送出 ${pendingStudents.length} 人報到。` : '目前沒有新增報到人員。';
+
       alert(saveFailed ? `${message}\n本機已更新，但 Google Sheet 儲存失敗，請再按一次送出或同步後確認。` : message);
     }
 
