@@ -93,6 +93,10 @@
   </main>
 
   <script>
+    const DEFAULT_SEMESTERS = [
+      { id: 'sem-114-down', name: '114下培緣', year: '114', term: '下', status: 'active' }
+    ];
+
     const DEFAULT_CLASSES = [
       { date: '5/17', title: '一貫道宗旨' },
       { date: '5/24', title: '新世紀健康飲食' },
@@ -155,6 +159,7 @@
 
     let classes = DEFAULT_CLASSES.map((item, index) => ({ ...item, id: item.id || `class-${index + 1}`, sortOrder: index + 1 }));
     let students = DEFAULT_STUDENTS.map((item, index) => ({ ...item, apiId: item.apiId || `student-${String(index + 1).padStart(3, '0')}`, sortOrder: index + 1, active: true }));
+    let semesters = DEFAULT_SEMESTERS.map(item => ({ ...item }));
 
     const GROUPS = ['講師', '一組', '二組', '三組'];
     const selected = new Set();
@@ -172,6 +177,7 @@
     const classSelect = document.getElementById('classSelect');
     const syncBadge = document.getElementById('syncBadge');
     const API_URL_STORAGE_KEY = 'attendanceApiUrl';
+    const DATA_CACHE_KEY = 'attendanceDataCache:v1';
     const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbyuTmdc2cC_zqzP6AOiY5fn_qNduFjseDGs0KuY3m7R5ijQ9fFTred8vB-TmspdciHgDw/exec';
     let apiUrl = localStorage.getItem(API_URL_STORAGE_KEY) || DEFAULT_API_URL;
     let currentSemesterId = 'sem-114-down';
@@ -267,15 +273,25 @@
     function normalizeStudent(item, index) {
       const activeValue = String(item.active ?? 'TRUE').trim().toLowerCase();
       return {
-        apiId: item.id || item.apiId || `student-${String(index + 1).padStart(3, '0')}`,
+        apiId: item.apiId || item.studentId || item.id || `student-${String(index + 1).padStart(3, '0')}`,
         group: item.group || '',
         role: item.role || '',
         unit: item.unit || '',
         name: item.name || '',
-        id: item.studentNo || item.idNo || '',
+        id: item.studentNo || item.idNo || (item.apiId ? item.id || '' : ''),
         url: item.url || '#',
         active: !['false', '0', 'no', '否', '停用'].includes(activeValue),
         sortOrder: Number(item.sortOrder || index + 1)
+      };
+    }
+
+    function normalizeSemester(item) {
+      return {
+        id: item.id || currentSemesterId,
+        name: item.name || item.id || '目前學期',
+        year: item.year || '',
+        term: item.term || '',
+        status: item.status || ''
       };
     }
 
@@ -325,6 +341,68 @@
       });
     }
 
+    function applyDataSet(data = {}) {
+      semesters = (data.semesters || DEFAULT_SEMESTERS).map(normalizeSemester);
+      const activeSemester = semesters.find(item => item.id === data.semesterId) || semesters.find(item => item.status === 'active') || semesters[0];
+      if (activeSemester?.id) currentSemesterId = activeSemester.id;
+
+      classes = (data.classes || [])
+        .filter(item => !item.semesterId || item.semesterId === currentSemesterId)
+        .map(normalizeClass)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+      students = (data.students || [])
+        .map(normalizeStudent)
+        .filter(item => item.active)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+
+      if (!classes.length) classes = DEFAULT_CLASSES.map(normalizeClass);
+      if (!students.length) students = DEFAULT_STUDENTS.map(normalizeStudent);
+
+      assignStudentKeys();
+      initClasses();
+      loadAttendanceRecords(data.records || data.attendance || []);
+      restoreStateForSelectedClass();
+      renderList();
+    }
+
+    function cacheableStudents() {
+      return students.map(student => {
+        const { key, ...item } = student;
+        return item;
+      });
+    }
+
+    function saveDataCache(source = 'local') {
+      const payload = {
+        source,
+        cachedAt: new Date().toISOString(),
+        semesterId: currentSemesterId,
+        semesters,
+        classes,
+        students: cacheableStudents(),
+        attendance: attendancePayloadFromRecords()
+      };
+      localStorage.setItem(DATA_CACHE_KEY, JSON.stringify(payload));
+    }
+
+    function loadDataCache() {
+      try {
+        const raw = localStorage.getItem(DATA_CACHE_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (error) {
+        console.warn('Failed to read local attendance cache', error);
+        return null;
+      }
+    }
+
+    function renderFromCache() {
+      const cached = loadDataCache();
+      if (!cached) return false;
+      applyDataSet(cached);
+      updateSyncBadge('使用本機資料', 'secondary');
+      return true;
+    }
+
     async function loadAttendanceFromApi() {
       const data = await jsonpRequest('attendance', { semesterId: currentSemesterId });
       loadAttendanceRecords(data.records || data.attendance || []);
@@ -352,14 +430,17 @@
     }
 
     async function persistAttendanceToApi() {
-      if (!apiUrl) return { ok: false, skipped: true };
+      if (!apiUrl) {
+        updateSyncBadge('使用本機資料', 'secondary');
+        return { ok: false, skipped: true };
+      }
       updateSyncBadge('儲存中', 'warning');
       const result = await postApi('saveAttendance', {
         semesterId: currentSemesterId,
         records: attendancePayloadFromRecords()
       });
       if (result && result.ok === false) throw new Error(result.error || 'API save failed');
-      updateSyncBadge('Google Sheet', 'success');
+      updateSyncBadge('已同步', 'success');
       return result;
     }
 
@@ -372,32 +453,22 @@
       updateSyncBadge('同步中', 'warning');
       try {
         const data = await jsonpRequest('bootstrap');
-        const semesters = data.semesters || [];
-        const activeSemester = semesters.find(item => item.status === 'active') || semesters[0];
-        if (activeSemester?.id) currentSemesterId = activeSemester.id;
+        const nextSemesters = (data.semesters || []).map(normalizeSemester);
+        const activeSemester = nextSemesters.find(item => item.status === 'active') || nextSemesters[0];
+        const semesterId = activeSemester?.id || currentSemesterId;
+        const attendanceData = await jsonpRequest('attendance', { semesterId });
 
-        classes = (data.classes || [])
-          .filter(item => !item.semesterId || item.semesterId === currentSemesterId)
-          .map(normalizeClass)
-          .sort((a, b) => a.sortOrder - b.sortOrder);
-        students = (data.students || [])
-          .map(normalizeStudent)
-          .filter(item => item.active)
-          .sort((a, b) => a.sortOrder - b.sortOrder);
-
-        if (!classes.length) classes = DEFAULT_CLASSES.map(normalizeClass);
-        if (!students.length) students = DEFAULT_STUDENTS.map(normalizeStudent);
-
-        assignStudentKeys();
-        initClasses();
-        await loadAttendanceFromApi();
-        restoreStateForSelectedClass();
-        renderList();
-        updateSyncBadge('Google Sheet', 'success');
+        applyDataSet({
+          ...data,
+          semesters: nextSemesters.length ? nextSemesters : data.semesters,
+          semesterId,
+          attendance: attendanceData.records || attendanceData.attendance || []
+        });
+        saveDataCache('api');
+        updateSyncBadge('已同步', 'success');
       } catch (error) {
         console.error(error);
         updateSyncBadge('同步失敗', 'danger');
-        alert('讀取 Google Sheet API 失敗，已保留目前資料。');
       }
     }
 
@@ -411,7 +482,7 @@
         reloadFromApi();
       } else {
         localStorage.removeItem(API_URL_STORAGE_KEY);
-        updateSyncBadge('本機資料', 'light');
+        updateSyncBadge('使用本機資料', 'secondary');
       }
     }
 
@@ -970,13 +1041,17 @@
         setTimeout(() => window.open(student.url, '_blank'), index * 800);
       });
       let saveFailed = false;
+      let cacheSource = 'api';
       try {
-        await persistAttendanceToApi();
+        const result = await persistAttendanceToApi();
+        if (result?.skipped) cacheSource = 'local';
       } catch (error) {
         console.error(error);
         saveFailed = true;
+        cacheSource = 'local';
         updateSyncBadge('儲存失敗', 'danger');
       }
+      saveDataCache(cacheSource);
       renderList();
       const message = pendingStudents.length ? `已送出 ${pendingStudents.length} 人報到。` : '目前沒有新增報到人員。';
       alert(saveFailed ? `${message}\n本機已更新，但 Google Sheet 儲存失敗，請再按一次送出或同步後確認。` : message);
@@ -1001,9 +1076,11 @@
     });
     initClasses();
     runSelfTests();
-    if (apiUrl) reloadFromApi();
-    else {
-      updateSyncBadge('本機資料', 'light');
+    const usedCache = renderFromCache();
+    if (apiUrl) {
+      reloadFromApi();
+    } else if (!usedCache) {
+      updateSyncBadge('使用本機資料', 'secondary');
       renderList();
     }
   </script>
