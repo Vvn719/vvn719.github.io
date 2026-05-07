@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,44 +8,196 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js" defer></script>
   <style>
-    body { background: #f6f7fb; }
-    .student-card { transition: .15s ease; cursor: pointer; border-width: 2px; }
-    .student-card:hover { transform: translateY(-1px); box-shadow: 0 .35rem 1rem rgba(0,0,0,.08); }
-    .student-card.checked { background: #eaf7ee; border-color: #8fd19e; }
-    .student-card.absent { background: #f1f3f5; border-color: #adb5bd; }
-    .student-card.done { opacity: .72; }
-    .student-card.excluded { background: #f8f9fa; border-style: dashed; opacity: .55; }
-    .role-badge { min-width: 3.4rem; }
-    .status-line { min-height: 1.6rem; }
-    .special-actions .btn { min-width: 4.2rem; }
-    .summary-card { border-left: 5px solid #0d6efd; }
-    .name-warning { color: #fd7e14; }
-    .name-danger { color: #dc3545; }
-    .sticky-actions { position: sticky; bottom: 0; z-index: 10; background: rgba(246,247,251,.96); backdrop-filter: blur(6px); }
-    .quick-nav { position: fixed; right: .75rem; top: 45%; z-index: 20; display: flex; flex-direction: column; gap: .4rem; }
-    .quick-nav .btn { width: 2.7rem; height: 2.7rem; border-radius: 999px; box-shadow: 0 .25rem .75rem rgba(0,0,0,.15); }
-    body.admin-modal-open { overflow: hidden; }
-    .admin-backdrop { position: fixed; inset: 0; z-index: 1050; display: none; align-items: center; justify-content: center; padding: 1rem; background: rgba(15, 23, 42, .5); }
-    .admin-backdrop.show { display: flex; }
-    .admin-dialog { width: min(980px, 100%); max-height: min(88vh, 820px); overflow: hidden; border-radius: .5rem; background: #fff; box-shadow: 0 1rem 3rem rgba(0,0,0,.22); }
-    .admin-body { max-height: calc(min(88vh, 820px) - 4.4rem); overflow: auto; }
-    .admin-tab-panel { display: none; }
-    .admin-tab-panel.active { display: block; }
-    .admin-preview-table { max-height: 22rem; overflow: auto; }
-    .admin-preview-table th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; }
+    body {
+      background: #f6f7fb;
+    }
 
-    .loading-overlay { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .45); backdrop-filter: blur(3px); }
-    .loading-overlay.show { display: flex; }
-    .loading-card { min-width: 220px; border-radius: 1rem; background: #fff; box-shadow: 0 1rem 3rem rgba(0,0,0,.2); }
+    .student-card {
+      transition: .15s ease;
+      cursor: pointer;
+      border-width: 2px;
+    }
+
+    .student-card:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 .35rem 1rem rgba(0, 0, 0, .08);
+    }
+
+    .student-card.checked {
+      background: #eaf7ee;
+      border-color: #8fd19e;
+    }
+
+    .student-card.absent {
+      background: #f1f3f5;
+      border-color: #adb5bd;
+    }
+
+    .student-card.done {
+      opacity: .72;
+    }
+
+    .student-card.excluded {
+      background: #f8f9fa;
+      border-style: dashed;
+      opacity: .55;
+    }
+
+    .role-badge {
+      min-width: 3.4rem;
+    }
+
+    .status-line {
+      min-height: 1.6rem;
+    }
+
+    .special-actions .btn {
+      min-width: 4.2rem;
+    }
+
+    .summary-card {
+      border-left: 5px solid #0d6efd;
+    }
+
+    .name-warning {
+      color: #fd7e14;
+    }
+
+    .name-danger {
+      color: #dc3545;
+    }
+
+    .sticky-actions {
+      position: sticky;
+      bottom: 0;
+      z-index: 10;
+      background: rgba(246, 247, 251, .96);
+      backdrop-filter: blur(6px);
+    }
+
+    .quick-nav {
+      position: fixed;
+      right: .75rem;
+      top: 45%;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      gap: .4rem;
+    }
+
+    .quick-nav .btn {
+      width: 2.7rem;
+      height: 2.7rem;
+      border-radius: 999px;
+      box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .15);
+    }
+
+    body.admin-modal-open {
+      overflow: hidden;
+    }
+
+    .admin-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 1050;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      background: rgba(15, 23, 42, .5);
+    }
+
+    .admin-backdrop.show {
+      display: flex;
+    }
+
+    .admin-dialog {
+      width: min(980px, 100%);
+      max-height: min(88vh, 820px);
+      overflow: hidden;
+      border-radius: .5rem;
+      background: #fff;
+      box-shadow: 0 1rem 3rem rgba(0, 0, 0, .22);
+    }
+
+    .admin-body {
+      max-height: calc(min(88vh, 820px) - 4.4rem);
+      overflow: auto;
+    }
+
+    .admin-tab-panel {
+      display: none;
+    }
+
+    .admin-tab-panel.active {
+      display: block;
+    }
+
+    .admin-preview-table {
+      max-height: 22rem;
+      overflow: auto;
+    }
+
+    .admin-preview-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f8f9fa;
+    }
+
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(15, 23, 42, .45);
+      backdrop-filter: blur(3px);
+    }
+
+    .loading-overlay.show {
+      display: flex;
+    }
+
+    .loading-card {
+      min-width: 220px;
+      border-radius: 1rem;
+      background: #fff;
+      box-shadow: 0 1rem 3rem rgba(0, 0, 0, .2);
+    }
+
     @media (max-width: 576px) {
-      .student-id, .unit { font-size: .85rem; }
-      .btn-wide { width: 100%; }
-      .table-summary th, .table-summary td { font-size: .85rem; }
-      .quick-nav { right: .5rem; top: auto; bottom: 5.5rem; }
-      .quick-nav .btn { width: 2.4rem; height: 2.4rem; padding: 0; }
+
+      .student-id,
+      .unit {
+        font-size: .85rem;
+      }
+
+      .btn-wide {
+        width: 100%;
+      }
+
+      .table-summary th,
+      .table-summary td {
+        font-size: .85rem;
+      }
+
+      .quick-nav {
+        right: .5rem;
+        top: auto;
+        bottom: 5.5rem;
+      }
+
+      .quick-nav .btn {
+        width: 2.4rem;
+        height: 2.4rem;
+        padding: 0;
+      }
     }
   </style>
 </head>
+
 <body>
   <nav class="navbar navbar-expand-lg bg-white border-bottom shadow-sm">
     <div class="container">
@@ -55,7 +208,8 @@
         <span class="badge text-bg-light border text-dark align-self-center" id="syncBadge">本機資料</span>
         <button class="btn btn-outline-dark btn-sm" type="button" onclick="openAdminModal()">管理</button>
         <button class="btn btn-outline-secondary btn-sm" type="button" onclick="configureApi()">設定 API</button>
-        <button class="btn btn-outline-primary btn-sm" type="button" onclick="reloadFromApi({ manual: true, force: true })">同步</button>
+        <button class="btn btn-outline-primary btn-sm" type="button"
+          onclick="reloadFromApi({ manual: true, force: true })">同步</button>
       </div>
     </div>
   </nav>
@@ -97,11 +251,14 @@
     <div id="studentList"></div>
 
     <div class="sticky-actions border-top mt-4 py-3">
-      <div class="container px-0 d-flex flex-column flex-md-row gap-2 justify-content-between align-items-stretch align-items-md-center">
+      <div
+        class="container px-0 d-flex flex-column flex-md-row gap-2 justify-content-between align-items-stretch align-items-md-center">
         <div class="fw-bold" id="selectedSummary">尚未勾選</div>
         <div class="d-flex flex-column flex-sm-row gap-2">
-          <button class="btn btn-outline-success btn-lg btn-wide" id="exportButton" type="button" onclick="exportAttendanceExcel()">匯出 Excel</button>
-          <button class="btn btn-success btn-lg btn-wide" id="submitAttendanceButton" type="button" onclick="submitAttendance()">送出報到</button>
+          <button class="btn btn-outline-success btn-lg btn-wide" id="exportButton" type="button"
+            onclick="exportAttendanceExcel()">匯出 Excel</button>
+          <button class="btn btn-success btn-lg btn-wide" id="submitAttendanceButton" type="button"
+            onclick="submitAttendance()">送出報到</button>
         </div>
       </div>
     </div>
@@ -111,14 +268,19 @@
     <div class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
       <div class="d-flex align-items-center justify-content-between border-bottom px-3 py-2">
         <h5 class="mb-0 fw-bold" id="adminTitle">管理模式</h5>
-        <button class="btn btn-sm btn-outline-secondary" type="button" onclick="closeAdminModal()" aria-label="關閉">關閉</button>
+        <button class="btn btn-sm btn-outline-secondary" type="button" onclick="closeAdminModal()"
+          aria-label="關閉">關閉</button>
       </div>
       <div class="admin-body p-3">
         <div class="btn-group w-100 mb-3" role="tablist" aria-label="管理功能">
-          <button class="btn btn-outline-primary active" id="adminTab-overview" type="button" onclick="setAdminTab('overview')">目前學期</button>
-          <button class="btn btn-outline-primary" id="adminTab-semesters" type="button" onclick="setAdminTab('semesters')">學期管理</button>
-          <button class="btn btn-outline-primary" id="adminTab-students" type="button" onclick="setAdminTab('students')">學生 CSV</button>
-          <button class="btn btn-outline-primary" id="adminTab-classes" type="button" onclick="setAdminTab('classes')">課程 CSV</button>
+          <button class="btn btn-outline-primary active" id="adminTab-overview" type="button"
+            onclick="setAdminTab('overview')">目前學期</button>
+          <button class="btn btn-outline-primary" id="adminTab-semesters" type="button"
+            onclick="setAdminTab('semesters')">學期管理</button>
+          <button class="btn btn-outline-primary" id="adminTab-students" type="button"
+            onclick="setAdminTab('students')">學生 CSV</button>
+          <button class="btn btn-outline-primary" id="adminTab-classes" type="button"
+            onclick="setAdminTab('classes')">課程 CSV</button>
         </div>
 
         <div class="alert alert-light border py-2 mb-3" id="adminStatus">尚未執行管理操作</div>
@@ -134,15 +296,18 @@
                 <h6 class="fw-bold mb-3">新增學期</h6>
                 <div class="mb-3">
                   <label class="form-label" for="newSemesterIdInput">semesterId</label>
-                  <input class="form-control" id="newSemesterIdInput" placeholder="sem-115-up" oninput="validateCreateSemesterForm()">
+                  <input class="form-control" id="newSemesterIdInput" placeholder="sem-115-up"
+                    oninput="validateCreateSemesterForm()">
                   <div class="form-text">建議格式：sem-115-up</div>
                 </div>
                 <div class="mb-3">
                   <label class="form-label" for="newSemesterNameInput">name</label>
-                  <input class="form-control" id="newSemesterNameInput" placeholder="115上培緣" oninput="validateCreateSemesterForm()">
+                  <input class="form-control" id="newSemesterNameInput" placeholder="115上培緣"
+                    oninput="validateCreateSemesterForm()">
                 </div>
                 <div id="createSemesterPreview" class="mb-3"></div>
-                <button class="btn btn-success w-100" id="createSemesterButton" type="button" onclick="confirmCreateSemester()" disabled>確認新增學期</button>
+                <button class="btn btn-success w-100" id="createSemesterButton" type="button"
+                  onclick="confirmCreateSemester()" disabled>確認新增學期</button>
               </div>
             </div>
 
@@ -151,30 +316,36 @@
                 <h6 class="fw-bold mb-3">複製學期</h6>
                 <div class="mb-3">
                   <label class="form-label" for="cloneSourceSemesterSelect">來源 semester</label>
-                  <select class="form-select" id="cloneSourceSemesterSelect" onchange="renderCloneSemesterPreview()"></select>
+                  <select class="form-select" id="cloneSourceSemesterSelect"
+                    onchange="renderCloneSemesterPreview()"></select>
                 </div>
                 <div class="row g-3">
                   <div class="col-12 col-md-6">
                     <label class="form-label" for="cloneSemesterIdInput">新 semesterId</label>
-                    <input class="form-control" id="cloneSemesterIdInput" placeholder="sem-115-up" oninput="renderCloneSemesterPreview()">
+                    <input class="form-control" id="cloneSemesterIdInput" placeholder="sem-115-up"
+                      oninput="renderCloneSemesterPreview()">
                   </div>
                   <div class="col-12 col-md-6">
                     <label class="form-label" for="cloneSemesterNameInput">新 name</label>
-                    <input class="form-control" id="cloneSemesterNameInput" placeholder="115上培緣" oninput="renderCloneSemesterPreview()">
+                    <input class="form-control" id="cloneSemesterNameInput" placeholder="115上培緣"
+                      oninput="renderCloneSemesterPreview()">
                   </div>
                 </div>
                 <div class="d-flex gap-3 my-3">
                   <div class="form-check">
-                    <input class="form-check-input" id="cloneStudentsCheckbox" type="checkbox" checked onchange="renderCloneSemesterPreview()">
+                    <input class="form-check-input" id="cloneStudentsCheckbox" type="checkbox" checked
+                      onchange="renderCloneSemesterPreview()">
                     <label class="form-check-label" for="cloneStudentsCheckbox">複製學生</label>
                   </div>
                   <div class="form-check">
-                    <input class="form-check-input" id="cloneClassesCheckbox" type="checkbox" checked onchange="renderCloneSemesterPreview()">
+                    <input class="form-check-input" id="cloneClassesCheckbox" type="checkbox" checked
+                      onchange="renderCloneSemesterPreview()">
                     <label class="form-check-label" for="cloneClassesCheckbox">複製課程</label>
                   </div>
                 </div>
                 <div id="cloneSemesterPreview" class="mb-3"></div>
-                <button class="btn btn-success w-100" id="cloneSemesterButton" type="button" onclick="confirmCloneSemester()" disabled>確認複製學期</button>
+                <button class="btn btn-success w-100" id="cloneSemesterButton" type="button"
+                  onclick="confirmCloneSemester()" disabled>確認複製學期</button>
               </div>
             </div>
           </div>
@@ -184,13 +355,16 @@
           <div class="row g-3 align-items-end">
             <div class="col-12 col-lg-8">
               <label class="form-label fw-bold" for="studentCsvInput">學生名單 CSV</label>
-              <input class="form-control" id="studentCsvInput" type="file" accept=".csv,text/csv" onchange="handleCsvFile('students', this)">
+              <input class="form-control" id="studentCsvInput" type="file" accept=".csv,text/csv"
+                onchange="handleCsvFile('students', this)">
             </div>
             <div class="col-12 col-lg-4 d-grid">
-              <button class="btn btn-success" id="studentImportButton" type="button" onclick="confirmCsvImport('students')" disabled>確認匯入學生</button>
+              <button class="btn btn-success" id="studentImportButton" type="button"
+                onclick="confirmCsvImport('students')" disabled>確認匯入學生</button>
             </div>
           </div>
-          <div class="small text-muted mt-2">欄位：id, group, role, unit, name, studentNo, url, active, sortOrder, semesterId</div>
+          <div class="small text-muted mt-2">欄位：id, group, role, unit, name, studentNo, url, active, sortOrder,
+            semesterId</div>
           <div class="mt-3" id="studentImportPreview"></div>
         </section>
 
@@ -198,10 +372,12 @@
           <div class="row g-3 align-items-end">
             <div class="col-12 col-lg-8">
               <label class="form-label fw-bold" for="classCsvInput">課程 CSV</label>
-              <input class="form-control" id="classCsvInput" type="file" accept=".csv,text/csv" onchange="handleCsvFile('classes', this)">
+              <input class="form-control" id="classCsvInput" type="file" accept=".csv,text/csv"
+                onchange="handleCsvFile('classes', this)">
             </div>
             <div class="col-12 col-lg-4 d-grid">
-              <button class="btn btn-success" id="classImportButton" type="button" onclick="confirmCsvImport('classes')" disabled>確認匯入課程</button>
+              <button class="btn btn-success" id="classImportButton" type="button" onclick="confirmCsvImport('classes')"
+                disabled>確認匯入課程</button>
             </div>
           </div>
           <div class="small text-muted mt-2">欄位：id, semesterId, date, title, sortOrder</div>
@@ -221,4 +397,5 @@
 
   <script src="./app.js?v=6" defer></script>
 </body>
+
 </html>
