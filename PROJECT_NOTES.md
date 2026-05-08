@@ -1,10 +1,32 @@
 # PROJECT_NOTES
 
-最後整理日期：2026-05-07
+最後整理日期：2026-05-08
 
 ## 專案概要
 
 `vvn719.github.io` 是 34 期培緣班報到系統。它是一個無 build step 的 GitHub Pages 靜態網站，入口是 `index.html`。資料後端是一份 Google Sheet，透過 `apps-script/Code.gs` 發布成 Apps Script Web App API。
+
+## 目前版本狀態
+
+- 目前遠端 `origin/main` 最新確認版本：`e7e22ee`。
+- GitHub Pages 已確認可讀到拆分後版本：`index.html` 載入 `app.js?v=7`。
+- 前端已拆為 `index.html` + `app.js`；主要業務邏輯在 `app.js`。
+- 目前 `DEFAULT_API_URL` 指向 Apps Script `/exec` URL，且 `normalizeApiUrl()` 會拒絕非 `/exec` 的 Apps Script URL。
+- 已支援多學期、每學期 cache、自動同步、管理模式、學生 CSV 匯入、課程 CSV 匯入、複製學期、Excel 匯出。
+- 正式使用前檢查文件：`docs/release-checklist.md`。
+- Google Sheet 備份流程文件：`docs/backup.md`。
+
+## 已知注意事項
+
+- 正式點名前請先複製 Google Sheet，或至少建立 `attendance` backup 工作表。
+- 修改 Apps Script 後，必須重新部署 Web App；只儲存程式碼不會更新正式 `/exec`。
+- `saveAttendance` 目前會以目前學期 payload 重寫同學期 attendance。送出前應先確認同步成功，避免用舊 cache 覆蓋較新的 Sheet 狀態。
+- 管理模式目前沒有登入或權限控管；知道網址的人若能操作頁面，就能看到管理入口。
+- CSV 匯入會替換目前學期的學生或課程 rows；匯入前務必先備份 Google Sheet。
+- 複製學期不會複製 attendance，這是刻意設計，避免新學期帶入舊點名紀錄。
+- 前端 `localStorage` 可能保存舊 API URL 或舊學期 cache；測正式版時請用無痕模式或清除站台資料確認。
+- ExcelJS 由 CDN 載入；若現場網路無法連 CDN，Excel 匯出會不可用。
+- 下次修改 `app.js` 時，必須同步更新 `index.html` 內的 `app.js?v=...` 版本號，避免 GitHub Pages 或瀏覽器快取載入舊 JS。
 
 目前資料來源優先順序：
 
