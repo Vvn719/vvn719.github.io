@@ -89,7 +89,7 @@ const API_URL_STORAGE_KEY = 'attendanceApiUrl'
 const SELECTED_SEMESTER_STORAGE_KEY = 'attendanceSelectedSemesterId'
 const SEMESTERS_CACHE_KEY = 'attendanceSemestersCache:v2'
 const DATA_CACHE_PREFIX = 'attendanceDataCache:v2'
-const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbz8P73gmSVSm5Z7-18bwuIHUosOlc6LwvD-OEkGzDcYr9ZlEMz0OzQP-Ndqdmn4CIx4Cw/exec'
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbzQx3i4ux_3m5J8FP3GQ19KE6PO9_-bJy3F0MQwrKSmjuddat3Apjr9_a2njTduRt1bXg/exec'
 let apiUrl = resolveApiUrl()
 let currentSemesterId = localStorage.getItem(SELECTED_SEMESTER_STORAGE_KEY) || DEFAULT_SEMESTERS[0].id
 let syncInFlight = null
@@ -2269,11 +2269,7 @@ async function submitAttendance() {
     : formSubmissionFailed
       ? '點名已保存，但部分 Google Form 送出失敗'
       : message
-  const finalTitle = saveFailed
-    ? '送出完成但雲端儲存失敗'
-    : formSubmissionFailed
-      ? '表單部分失敗'
-      : '送出完成'
+  const finalTitle = saveFailed ? '送出完成但雲端儲存失敗' : formSubmissionFailed ? '表單部分失敗' : '送出完成'
   await showMessage(finalMessage, finalTitle)
 }
 
