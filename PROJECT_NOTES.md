@@ -9,7 +9,7 @@
 ## 目前版本狀態
 
 - GitHub Pages 版本以 `origin/main` 最新 commit 為準。
-- GitHub Pages 已確認可讀到拆分後版本；目前 `index.html` 載入 `app.js?v=13`。
+- GitHub Pages 已確認可讀到拆分後版本；目前 `index.html` 載入 `app.js?v=14`。
 - 前端已拆為 `index.html` + `app.js`；主要業務邏輯在 `app.js`。
 - 目前 `DEFAULT_API_URL` 指向 Apps Script `/exec` URL，且 `normalizeApiUrl()` 會拒絕非 `/exec` 的 Apps Script URL。
 - 已支援多學期、每學期 cache、自動同步、管理模式、課程單筆編輯、學生 CSV 匯入、課程 CSV 匯入、複製學期、Excel 匯出。

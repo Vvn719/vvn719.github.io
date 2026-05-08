@@ -73,13 +73,25 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 0.1rem;
 }
 
 .quick-nav .btn {
-  width: 2.7rem;
+  min-width: 2.7rem;
   height: 2.7rem;
   border-radius: 999px;
   box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.15);
+  white-space: nowrap;
+}
+
+.quick-nav .group-nav-button {
+  width: auto;
+  max-width: 7rem;
+  padding-inline: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 body.admin-modal-open {
@@ -293,8 +305,13 @@ body.admin-modal-open {
   }
 
   .quick-nav .btn {
-    width: 2.4rem;
+    min-width: 2.4rem;
     height: 2.4rem;
     padding: 0;
+  }
+
+  .quick-nav .group-nav-button {
+    max-width: 5.5rem;
+    padding-inline: 0.55rem;
   }
 }

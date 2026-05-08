@@ -69,7 +69,6 @@ let currentStudents = DEFAULT_STUDENTS.map((item, index) => ({
 }))
 let semesters = DEFAULT_SEMESTERS.map(item => ({ ...item }))
 
-const DEFAULT_GROUPS = ['講師', '一組', '二組', '三組']
 const selected = new Set()
 const confirmed = new Set()
 const excluded = new Set()
@@ -85,6 +84,7 @@ const searchEl = document.getElementById('searchInput')
 const classSelect = document.getElementById('classSelect')
 const semesterSelect = document.getElementById('semesterSelect')
 const syncBadge = document.getElementById('syncBadge')
+const quickNavEl = document.getElementById('quickNav')
 const API_URL_STORAGE_KEY = 'attendanceApiUrl'
 const SELECTED_SEMESTER_STORAGE_KEY = 'attendanceSelectedSemesterId'
 const SEMESTERS_CACHE_KEY = 'attendanceSemestersCache:v2'
@@ -352,7 +352,7 @@ function normalizeStudent(item, index) {
     .toLowerCase()
   return {
     apiId: item.apiId || item.studentId || item.id || `student-${String(index + 1).padStart(3, '0')}`,
-    group: item.group || '',
+    group: String(item.group || '').trim(),
     role: item.role || '',
     unit: item.unit || '',
     name: item.name || '',
@@ -378,9 +378,10 @@ function applySemesters(nextSemesters = DEFAULT_SEMESTERS, preferredSemesterId =
 function currentGroups() {
   const groups = []
   currentStudents.forEach(student => {
-    if (student.group && !groups.includes(student.group)) groups.push(student.group)
+    const group = String(student.group || '').trim()
+    if (group && !groups.includes(group)) groups.push(group)
   })
-  return groups.length ? groups : DEFAULT_GROUPS
+  return groups
 }
 
 function reportGroups() {
@@ -1725,6 +1726,7 @@ function renderStudentCard(student) {
 
 function renderList() {
   const keyword = searchEl.value.trim().toLowerCase()
+  renderQuickNav()
   visibleIds.clear()
   listEl.innerHTML = currentGroups()
     .map(group => {
@@ -1737,6 +1739,17 @@ function renderList() {
     .join('')
   updateSummary()
   renderSummary()
+}
+
+function renderQuickNav() {
+  if (!quickNavEl) return
+  const groups = currentGroups()
+  quickNavEl.innerHTML = `${groups
+    .map(group => {
+      const encodedGroup = encodeURIComponent(group)
+      return `<button class="btn btn-primary btn-sm group-nav-button" type="button" title="${escapeHtml(group)}" onclick="scrollToGroup(decodeURIComponent('${encodedGroup}'))">${escapeHtml(group)}</button>`
+    })
+    .join('')}<button class="btn btn-dark btn-sm" type="button" aria-label="回頂部" onclick="scrollToTop()">↑</button>`
 }
 
 function cardToggle(key, event) {

@@ -27,12 +27,7 @@
     </div>
   </nav>
 
-  <div class="quick-nav">
-    <button class="btn btn-primary btn-sm" type="button" onclick="scrollToGroup('一組')">一</button>
-    <button class="btn btn-primary btn-sm" type="button" onclick="scrollToGroup('二組')">二</button>
-    <button class="btn btn-primary btn-sm" type="button" onclick="scrollToGroup('三組')">三</button>
-    <button class="btn btn-dark btn-sm" type="button" onclick="scrollToTop()">↑</button>
-  </div>
+  <div class="quick-nav" id="quickNav" aria-label="組別快速導覽"></div>
 
   <main class="container py-4" id="pageTop">
     <div class="card shadow-sm mb-3">
@@ -301,7 +296,7 @@
   </div>
 
 
-  <script src="./app.js?v=13" defer></script>
+  <script src="./app.js?v=14" defer></script>
 </body>
 
 </html>
