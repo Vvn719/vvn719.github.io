@@ -75,6 +75,8 @@ Apps Script 會確保同一份 Google Sheet 裡存在四張工作表，第一列
 | `unit` | 地方單位。 |
 | `name` | 姓名。 |
 | `studentNo` | 學號，匯出 Excel 時寫入學號欄。 |
+| `formId` | 未來 Google Form 代送用的表單 ID 欄位值；不可和系統內部 `id` 混用。 |
+| `qrUrl` | QR code 或 Google Form prefilled URL；前端 CSV 也接受 `qrLink`、`prefilledUrl`。 |
 | `url` | 送出報到後可自動開啟的個人連結；`#` 表示沒有連結。 |
 | `active` | 是否啟用。`false`、`0`、`no`、`否`、`停用` 會被視為停用。 |
 | `sortOrder` | 顯示排序。 |
@@ -148,10 +150,10 @@ JSONP callback 參數會經 `/^[\w.$]+$/` 驗證，通過時回傳 JavaScript，
 
 CSV 欄位：
 
-- 學生 CSV：`id`, `group`, `role`, `unit`, `name`, `studentNo`, `url`, `active`, `sortOrder`, `semesterId`
+- 學生 CSV：`id`, `group`, `role`, `unit`, `name`, `studentNo`, `formId`, `qrUrl`, `url`, `active`, `sortOrder`, `semesterId`
 - 課程 CSV：`id`, `semesterId`, `date`, `title`, `sortOrder`
 
-前端也接受部分中文欄位名稱，例如 `組別`、`角色`、`單位`、`姓名`、`學號`、`日期`、`課程名稱`。匯入時 `group`、`role`、`name` 是學生必填欄位；`date`、`title` 是課程必填欄位。若 CSV 沒有提供 `id`，前端會依順序產生 `student-001` 或 `class-1` 這類 ID。
+前端也接受部分中文欄位名稱，例如 `組別`、`角色`、`單位`、`姓名`、`學號`、`日期`、`課程名稱`。學生 CSV 的 `qrUrl` 也接受 `qrLink` 或 `prefilledUrl`。匯入時 `group`、`role`、`name` 是學生必填欄位；`date`、`title` 是課程必填欄位。若 CSV 沒有提供 `id`，前端會依順序產生 `student-001` 或 `class-1` 這類 ID。
 
 前端先以一般 `fetch` POST 儲存；如果遇到 CORS 相關錯誤，會改用 `mode: 'no-cors'` 再送一次，並以 `{ ok: true, opaque: true }` 視為已送出，但這種情況無法讀取伺服器實際回應。
 
@@ -304,5 +306,5 @@ CSV 欄位：
 - 增加前端測試與 Apps Script 測試資料，讓 schema 與同步流程可回歸驗證。
 - 將 Excel 標題、檔名與 worksheet 名稱改為依目前學期動態產生。
 - 增加 Sheet 資料驗證或管理文件，避免手動編輯欄位時破壞 schema。
-- 清楚定義 `url` 欄位的用途與個人連結流程。
+- 清楚定義 `url`、`formId`、`qrUrl` 欄位的用途與未來 Google Form 代送流程。
 - 擴充 GitHub Pages 文件，加入第一次部署、API URL 設定與常見故障排除。

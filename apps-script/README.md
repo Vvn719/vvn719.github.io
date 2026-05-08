@@ -34,6 +34,8 @@
 
 新增學期時，請在 `classes` 填入對應的 `semesterId`。`students` 也可以填 `semesterId`，這樣不同學期能使用不同學生、分組與角色；舊資料若 `semesterId` 空白，會視為預設的 `sem-114-down`。
 
+`students` 欄位為：`id`, `group`, `role`, `unit`, `name`, `studentNo`, `formId`, `qrUrl`, `url`, `active`, `sortOrder`, `semesterId`。`id` 是系統內部 studentId；`formId` 是未來 Google Form 代送用欄位，兩者不要混用。
+
 ## API 動作
 
 - `GET ?action=bootstrap`：讀取學期、課程、學生。

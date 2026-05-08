@@ -9,7 +9,7 @@
 ## 目前版本狀態
 
 - GitHub Pages 版本以 `origin/main` 最新 commit 為準。
-- GitHub Pages 已確認可讀到拆分後版本；目前 `index.html` 載入 `app.js?v=10`。
+- GitHub Pages 已確認可讀到拆分後版本；目前 `index.html` 載入 `app.js?v=11`。
 - 前端已拆為 `index.html` + `app.js`；主要業務邏輯在 `app.js`。
 - 目前 `DEFAULT_API_URL` 指向 Apps Script `/exec` URL，且 `normalizeApiUrl()` 會拒絕非 `/exec` 的 Apps Script URL。
 - 已支援多學期、每學期 cache、自動同步、管理模式、課程單筆編輯、學生 CSV 匯入、課程 CSV 匯入、複製學期、Excel 匯出。
@@ -71,9 +71,9 @@
 
 ### `students`
 
-`id`, `group`, `role`, `unit`, `name`, `studentNo`, `url`, `active`, `sortOrder`, `semesterId`
+`id`, `group`, `role`, `unit`, `name`, `studentNo`, `formId`, `qrUrl`, `url`, `active`, `sortOrder`, `semesterId`
 
-用途：定義人員、分組、角色與排序。`active` 若為 `false`、`0`、`no`、`否`、`停用`，前端不顯示。
+用途：定義人員、分組、角色與排序。`id` 是系統內部 studentId；`formId` 是未來 Google Form 代送用的表單欄位值，兩者不可混用。`qrUrl` 可保存 QR/prefilled URL。`active` 若為 `false`、`0`、`no`、`否`、`停用`，前端不顯示。
 
 ### `attendance`
 
@@ -103,7 +103,7 @@ POST actions：
 
 注意：目前 `saveAttendance` 是整個學期替換寫入。它保留其他學期 records，但會清空目前學期的 attendance 後重寫前端 payload，因此送出前最好先同步完整資料。
 
-CSV 匯入流程：前端先解析 CSV 並顯示預覽，確認後才寫入 Google Sheet，寫入完成會重新同步前端資料。匯入不會移除程式內建 fallback data。學生 CSV 欄位為 `id`, `group`, `role`, `unit`, `name`, `studentNo`, `url`, `active`, `sortOrder`, `semesterId`；課程 CSV 欄位為 `id`, `semesterId`, `date`, `title`, `sortOrder`。
+CSV 匯入流程：前端先解析 CSV 並顯示預覽，確認後才寫入 Google Sheet，寫入完成會重新同步前端資料。匯入不會移除程式內建 fallback data。學生 CSV 欄位為 `id`, `group`, `role`, `unit`, `name`, `studentNo`, `formId`, `qrUrl`, `url`, `active`, `sortOrder`, `semesterId`；`qrUrl` 也接受 `qrLink` 或 `prefilledUrl` 欄名。課程 CSV 欄位為 `id`, `semesterId`, `date`, `title`, `sortOrder`。
 
 ## localStorage Cache
 

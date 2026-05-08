@@ -346,6 +346,8 @@ const DEFAULT_SEMESTERS = [
         unit: item.unit || '',
         name: item.name || '',
         id: item.studentNo || item.idNo || (item.apiId ? item.id || '' : ''),
+        formId: item.formId || '',
+        qrUrl: item.qrUrl || item.qrLink || item.prefilledUrl || '',
         semesterId: item.semesterId || '',
         url: item.url || '#',
         active: !['false', '0', 'no', '否', '停用'].includes(activeValue),
@@ -608,6 +610,8 @@ const DEFAULT_SEMESTERS = [
           unit: item.unit,
           name: item.name,
           studentNo: item.id || '',
+          formId: item.formId || '',
+          qrUrl: item.qrUrl || '',
           url: item.url || '#',
           active: item.active,
           sortOrder: item.sortOrder,
@@ -863,6 +867,7 @@ const DEFAULT_SEMESTERS = [
         unit: student.unit,
         name: student.name,
         id: student.id || student.apiId,
+        formId: student.formId || '',
         sortOrder: student.sortOrder
       }));
       const classRows = currentClasses.map(item => ({
@@ -905,6 +910,7 @@ const DEFAULT_SEMESTERS = [
           { key: 'unit', label: '單位' },
           { key: 'name', label: '姓名' },
           { key: 'id', label: 'id / 學號' },
+          { key: 'formId', label: 'formId' },
           { key: 'sortOrder', label: '排序' }
         ], '目前學期沒有學生')}
       `;
@@ -1246,6 +1252,8 @@ const DEFAULT_SEMESTERS = [
         unit: ['unit', '單位', '地方單位'],
         name: ['name', '姓名', '名字'],
         studentNo: ['studentNo', '學號'],
+        formId: ['formId', '表單id', 'googleFormId', 'google表單id'],
+        qrUrl: ['qrUrl', 'qrLink', 'prefilledUrl', 'qr連結', '預填連結', '預填網址'],
         url: ['url', 'link', '連結', '報到連結'],
         active: ['active', '啟用', '是否啟用'],
         sortOrder: ['sortOrder', '排序', '順序'],
@@ -1332,6 +1340,8 @@ const DEFAULT_SEMESTERS = [
           unit: valueFor(row, 'unit'),
           name: valueFor(row, 'name'),
           studentNo: valueFor(row, 'studentNo'),
+          formId: valueFor(row, 'formId'),
+          qrUrl: valueFor(row, 'qrUrl'),
           url: valueFor(row, 'url') || '#',
           active: valueFor(row, 'active') || 'TRUE',
           sortOrder: normalizeClientSortOrder(valueFor(row, 'sortOrder'), index + 1),
@@ -1376,6 +1386,8 @@ const DEFAULT_SEMESTERS = [
           { key: 'unit', label: 'unit' },
           { key: 'name', label: 'name' },
           { key: 'studentNo', label: 'studentNo' },
+          { key: 'formId', label: 'formId' },
+          { key: 'qrUrl', label: 'qrUrl' },
           { key: 'active', label: 'active' },
           { key: 'sortOrder', label: 'sortOrder' }
         ]

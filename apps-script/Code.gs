@@ -10,7 +10,7 @@ const SHEETS = {
 const HEADERS = {
   semesters: ['id', 'name', 'year', 'term', 'status'],
   classes: ['id', 'semesterId', 'date', 'title', 'sortOrder'],
-  students: ['id', 'group', 'role', 'unit', 'name', 'studentNo', 'url', 'active', 'sortOrder', 'semesterId'],
+  students: ['id', 'group', 'role', 'unit', 'name', 'studentNo', 'formId', 'qrUrl', 'url', 'active', 'sortOrder', 'semesterId'],
   attendance: ['semesterId', 'classId', 'studentId', 'status', 'note', 'updatedAt']
 };
 
@@ -76,7 +76,7 @@ const DEFAULT_STUDENTS = [
   { id: 'student-047', group: '三組', role: '學員', unit: '瑞周全真天如', name: '陳盈臻', studentNo: '', url: '#', active: true, sortOrder: 47 },
   { id: 'student-048', group: '三組', role: '學員', unit: '瑞周天曉天恆', name: '蔡昀廷', studentNo: '', url: '#', active: true, sortOrder: 48 },
   { id: 'student-049', group: '三組', role: '學員', unit: '瑞周全真天如', name: '邱瑀宸', studentNo: '', url: '#', active: true, sortOrder: 49 }
-];
+].map(student => ({ ...student, formId: '', qrUrl: '' }));
 
 function setup() {
   const ss = getSpreadsheet_();
@@ -314,6 +314,8 @@ function normalizeImportedStudents_(rows, semesterId) {
       unit: row.unit || '',
       name: row.name || '',
       studentNo: row.studentNo || row.idNo || '',
+      formId: row.formId || '',
+      qrUrl: row.qrUrl || row.qrLink || row.prefilledUrl || '',
       url: row.url || '#',
       active: row.active === undefined || row.active === '' ? true : row.active,
       sortOrder: normalizeSortOrder_(row.sortOrder, index + 1),
@@ -385,9 +387,49 @@ function getSpreadsheet_() {
 
 function ensureSheet_(ss, name, headers) {
   const sheet = ss.getSheetByName(name) || ss.insertSheet(name);
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  migrateSheetHeaders_(sheet, headers);
   sheet.setFrozenRows(1);
   return sheet;
+}
+
+function migrateSheetHeaders_(sheet, headers) {
+  const lastRow = sheet.getLastRow();
+  const lastColumn = Math.max(sheet.getLastColumn(), headers.length);
+  if (!lastRow) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    return;
+  }
+
+  const currentHeaders = sheet
+    .getRange(1, 1, 1, lastColumn)
+    .getValues()[0]
+    .map(header => String(header || '').trim());
+  const hasHeader = currentHeaders.some(Boolean);
+  const sameHeaders = headers.length === currentHeaders.filter(Boolean).length
+    && headers.every((header, index) => currentHeaders[index] === header);
+
+  if (!hasHeader || sameHeaders) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    return;
+  }
+
+  const rows = lastRow > 1
+    ? sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues()
+      .filter(row => row.some(value => value !== ''))
+      .map(row => {
+        const item = {};
+        currentHeaders.forEach((header, index) => {
+          if (header) item[header] = normalizeCell_(row[index]);
+        });
+        return item;
+      })
+    : [];
+
+  sheet.getRange(1, 1, lastRow, lastColumn).clearContent();
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  if (rows.length) {
+    sheet.getRange(2, 1, rows.length, headers.length).setValues(objectsToValues_(rows, headers));
+  }
 }
 
 function seedSheetIfEmpty_(sheet, headers, rows) {
