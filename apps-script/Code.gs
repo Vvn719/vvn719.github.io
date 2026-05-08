@@ -1,4 +1,5 @@
 const DEFAULT_SEMESTER_ID = 'sem-114-down';
+const API_TOKEN = 'vvn719-attendance-token';
 
 const SHEETS = {
   semesters: 'semesters',
@@ -116,15 +117,18 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    setup();
     const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    const payload = body.payload || {};
+    if (payload.apiToken !== API_TOKEN) return respond_({ ok: false, error: 'Unauthorized' });
+    delete payload.apiToken;
+    setup();
     const action = body.action || (e && e.parameter && e.parameter.action) || '';
-    if (action === 'saveAttendance') return respond_(saveAttendance_(body.payload || {}));
-    if (action === 'importStudents') return respond_(importStudents_(body.payload || {}));
-    if (action === 'importClasses') return respond_(importClasses_(body.payload || {}));
-    if (action === 'updateClass') return respond_(updateClass_(body.payload || {}));
-    if (action === 'createSemester') return respond_(createSemester_(body.payload || {}));
-    if (action === 'cloneSemester') return respond_(cloneSemester_(body.payload || {}));
+    if (action === 'saveAttendance') return respond_(saveAttendance_(payload));
+    if (action === 'importStudents') return respond_(importStudents_(payload));
+    if (action === 'importClasses') return respond_(importClasses_(payload));
+    if (action === 'updateClass') return respond_(updateClass_(payload));
+    if (action === 'createSemester') return respond_(createSemester_(payload));
+    if (action === 'cloneSemester') return respond_(cloneSemester_(payload));
     return respond_({ ok: false, error: 'Unknown action' });
   } catch (error) {
     return respond_({ ok: false, error: String(error && error.message ? error.message : error) });

@@ -109,6 +109,15 @@ Apps Script 會確保同一份 Google Sheet 裡存在五張工作表，第一列
 
 API 入口是 Apps Script Web App URL。前端預設 URL 存在 `DEFAULT_API_URL`，也可由右上角「設定 API」改寫並保存到 `localStorage`。
 
+簡易寫入防護：
+
+- Apps Script 定義 `API_TOKEN` 常數。
+- 前端 `app.js` 也定義同值的 `API_TOKEN` 常數。
+- 所有 `doPost` actions 都要求 `payload.apiToken === API_TOKEN`；不符合時回傳 `{ ok:false, error:'Unauthorized' }`。
+- `doGet` 讀取資料目前不強制 token，讓 GitHub Pages 載入與背景同步維持簡單。
+- 前端 `postApi()` 會自動把 `apiToken` 加進 payload；若 API 回傳 `Unauthorized`，使用者會看到「API 驗證失敗，請檢查設定」。
+- 這是簡易防誤寫保護，token 會隨前端程式碼公開；若需要真正權限控管，仍應加登入、Apps Script 執行身分控管或部署層保護。
+
 ### GET
 
 前端讀取使用 JSONP，因為 GitHub Pages 與 Apps Script 是不同網域。
@@ -132,6 +141,7 @@ JSONP callback 參數會經 `/^[\w.$]+$/` 驗證，通過時回傳 JavaScript，
 {
   "action": "saveAttendance",
   "payload": {
+    "apiToken": "API_TOKEN",
     "semesterId": "sem-114-down",
     "classId": "class-1",
     "records": [

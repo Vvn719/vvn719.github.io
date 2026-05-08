@@ -90,6 +90,8 @@ const SELECTED_SEMESTER_STORAGE_KEY = 'attendanceSelectedSemesterId'
 const SEMESTERS_CACHE_KEY = 'attendanceSemestersCache:v2'
 const DATA_CACHE_PREFIX = 'attendanceDataCache:v2'
 const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbzQx3i4ux_3m5J8FP3GQ19KE6PO9_-bJy3F0MQwrKSmjuddat3Apjr9_a2njTduRt1bXg/exec'
+const API_TOKEN = 'vvn719-attendance-token'
+const API_AUTH_ERROR_MESSAGE = 'API 驗證失敗，請檢查設定'
 let apiUrl = resolveApiUrl()
 let currentSemesterId = localStorage.getItem(SELECTED_SEMESTER_STORAGE_KEY) || DEFAULT_SEMESTERS[0].id
 let syncInFlight = null
@@ -308,7 +310,7 @@ async function postApi(action, payload) {
   if (!apiUrl) return { ok: false, skipped: true }
   const url = new URL(apiUrl)
   url.searchParams.set('action', action)
-  const body = JSON.stringify({ action, payload })
+  const body = JSON.stringify({ action, payload: { ...(payload || {}), apiToken: API_TOKEN } })
 
   try {
     const response = await fetch(url.toString(), {
@@ -327,6 +329,11 @@ async function postApi(action, payload) {
     })
     return { ok: true, opaque: true }
   }
+}
+
+function apiErrorMessage(result, fallback) {
+  if (result?.error === 'Unauthorized') return API_AUTH_ERROR_MESSAGE
+  return result?.error || fallback
 }
 
 function normalizeClass(item, index) {
@@ -650,7 +657,7 @@ async function persistAttendanceToApi() {
     classId: classItem?.id || '',
     records: attendancePayloadFromRecords()
   })
-  if (result && result.ok === false) throw new Error(result.error || 'API save failed')
+  if (result && result.ok === false) throw new Error(apiErrorMessage(result, 'API save failed'))
   setSyncState('synced')
   return result
 }
@@ -1026,7 +1033,7 @@ async function saveClassEdit() {
     })
 
     if (result && result.ok === false) {
-      throw new Error(result.error || '課程更新失敗')
+      throw new Error(apiErrorMessage(result, '課程更新失敗'))
     }
 
     closeClassEditModal()
@@ -1204,7 +1211,7 @@ async function confirmCreateSemester() {
 
   try {
     const result = await postApi('createSemester', payload)
-    if (result && result.ok === false) throw new Error(result.error || '新增學期失敗')
+    if (result && result.ok === false) throw new Error(apiErrorMessage(result, '新增學期失敗'))
     await syncToSemester(payload.id)
     document.getElementById('newSemesterIdInput').value = ''
     document.getElementById('newSemesterNameInput').value = ''
@@ -1259,7 +1266,7 @@ async function confirmCloneSemester() {
       copyStudents,
       copyClasses
     })
-    if (result && result.ok === false) throw new Error(result.error || '複製學期失敗')
+    if (result && result.ok === false) throw new Error(apiErrorMessage(result, '複製學期失敗'))
     await syncToSemester(payload.id)
     document.getElementById('cloneSemesterIdInput').value = ''
     document.getElementById('cloneSemesterNameInput').value = ''
@@ -1522,7 +1529,7 @@ async function confirmCsvImport(type) {
       semesterId: currentSemesterId,
       rows: state.rows
     })
-    if (result && result.ok === false) throw new Error(result.error || '匯入失敗')
+    if (result && result.ok === false) throw new Error(apiErrorMessage(result, '匯入失敗'))
     await reloadFromApi({ semesterId: currentSemesterId, keepSemester: true, throwOnError: true })
     renderAdminOverview()
     renderImportPreview(type)
@@ -2213,6 +2220,7 @@ async function submitAttendance() {
 
   let saveFailed = false
   let formSubmissionFailed = false
+  let authFailed = false
   let cacheSource = 'api'
   let message = pendingStudents.length ? `已送出 ${pendingStudents.length} 人報到。` : '目前沒有新增報到人員。'
 
@@ -2245,11 +2253,12 @@ async function submitAttendance() {
     try {
       const result = await persistAttendanceToApi()
       if (result?.skipped) cacheSource = 'local'
-      if (result && result.ok === false) throw new Error(result.error || 'API save failed')
+      if (result && result.ok === false) throw new Error(apiErrorMessage(result, 'API save failed'))
       if (result?.formSubmissions?.failed > 0) formSubmissionFailed = true
     } catch (error) {
       console.warn(error)
       saveFailed = true
+      if (error.message === API_AUTH_ERROR_MESSAGE) authFailed = true
       cacheSource = 'local'
       setSyncState('saveFailed')
     }
@@ -2264,12 +2273,20 @@ async function submitAttendance() {
     setSubmitLoading(false)
   }
 
-  const finalMessage = saveFailed
+  const finalMessage = authFailed
+    ? API_AUTH_ERROR_MESSAGE
+    : saveFailed
     ? `${message}\n本機已更新，但 Google Sheet 儲存失敗，請再按一次送出或同步後確認。`
     : formSubmissionFailed
       ? '點名已保存，但部分 Google Form 送出失敗'
       : message
-  const finalTitle = saveFailed ? '送出完成但雲端儲存失敗' : formSubmissionFailed ? '表單部分失敗' : '送出完成'
+  const finalTitle = authFailed
+    ? 'API 驗證失敗'
+    : saveFailed
+      ? '送出完成但雲端儲存失敗'
+      : formSubmissionFailed
+        ? '表單部分失敗'
+        : '送出完成'
   await showMessage(finalMessage, finalTitle)
 }
 

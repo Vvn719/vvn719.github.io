@@ -9,7 +9,7 @@
 ## 目前版本狀態
 
 - GitHub Pages 版本以 `origin/main` 最新 commit 為準。
-- GitHub Pages 已確認可讀到拆分後版本；目前 `index.html` 載入 `app.js?v=11`。
+- GitHub Pages 已確認可讀到拆分後版本；目前 `index.html` 載入 `app.js?v=13`。
 - 前端已拆為 `index.html` + `app.js`；主要業務邏輯在 `app.js`。
 - 目前 `DEFAULT_API_URL` 指向 Apps Script `/exec` URL，且 `normalizeApiUrl()` 會拒絕非 `/exec` 的 Apps Script URL。
 - 已支援多學期、每學期 cache、自動同步、管理模式、課程單筆編輯、學生 CSV 匯入、課程 CSV 匯入、複製學期、Excel 匯出。
@@ -22,6 +22,8 @@
 - 修改 Apps Script 後，必須重新部署 Web App；只儲存程式碼不會更新正式 `/exec`。
 - `saveAttendance` 目前會以目前學期 payload 重寫同學期 attendance。送出前應先確認同步成功，避免用舊 cache 覆蓋較新的 Sheet 狀態。
 - `saveAttendance` 寫入 attendance 後會針對目前課程代送 Google Form；表單失敗不會 rollback attendance，請查看 `formSubmissions`。
+- 所有 `doPost` actions 都需要 `payload.apiToken` 等於 Apps Script 的 `API_TOKEN`；前端 `postApi()` 會自動帶入同名常數。若 token 不一致，畫面會顯示「API 驗證失敗，請檢查設定」。
+- 目前 `API_TOKEN` 寫在前端與 Apps Script 常數裡，只是簡易防誤寫，不是真正私密驗證。
 - 修改 `apps-script/Code.gs` 後，請在 Apps Script 重新部署既有 Web App 的新版本，不要新增新的 deployment。
 - 管理模式目前沒有登入或權限控管；知道網址的人若能操作頁面，就能看到管理入口。
 - CSV 匯入會替換目前學期的學生或課程 rows；匯入前務必先備份 Google Sheet。
@@ -48,11 +50,13 @@
   - JSONP GET 讀取 Apps Script。
   - `fetch` POST 儲存 attendance。
   - `localStorage` 保存 API URL、學期選擇與每學期資料快取。
+  - `postApi()` 自動附帶 `API_TOKEN`，處理 Apps Script POST 驗證失敗訊息。
   - 管理模式 Modal：查看目前學期資料、單筆編輯課程、新增/複製學期、預覽並匯入學生 CSV、預覽並匯入課程 CSV。
 - Backend：`apps-script/Code.gs`
   - 綁定 Google Sheet。
   - 自動建立 `semesters`、`classes`、`students`、`attendance`、`formSubmissions` 五張工作表。
   - 提供 GET actions、`saveAttendance`、`updateClass`、`createSemester`、`cloneSemester`、`importStudents`、`importClasses` POST。
+  - POST actions 會檢查 `payload.apiToken`；GET 目前不強制 token。
 - Hosting：GitHub Pages
   - repo 名稱是 `vvn719.github.io`。
   - 目前沒有 build、package、workflow，直接部署 root 的 `index.html`。
@@ -101,6 +105,8 @@ GET actions：
 - `bootstrap`：讀學期、課程、人員；目前不含 attendance。
 
 POST actions：
+
+所有 POST payload 都需要包含 `apiToken`，前端會自動附加；後端驗證失敗時回傳 `{ ok:false, error:'Unauthorized' }`。
 
 - `saveAttendance`：儲存 attendance。
 - `updateClass`：更新目前學期單筆課程的 `date`、`title`、`sortOrder`，不修改 attendance。
