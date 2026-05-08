@@ -173,6 +173,10 @@
       margin: 0;
     }
 
+    .app-modal-backdrop .modal-dialog.modal-lg {
+      width: min(760px, 100%);
+    }
+
     .app-modal-message {
       white-space: pre-line;
     }
@@ -453,6 +457,63 @@
     </div>
   </div>
 
+  <div class="app-modal-backdrop" id="studentEditModal" aria-hidden="true" onclick="handleStudentEditBackdrop(event)">
+    <div class="modal-dialog modal-dialog-centered modal-lg" role="dialog" aria-modal="true" aria-labelledby="studentEditTitle">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div>
+            <h5 class="modal-title fw-bold" id="studentEditTitle">編輯學生</h5>
+            <div class="small text-muted" id="studentEditMeta"></div>
+          </div>
+          <button class="btn-close" type="button" aria-label="關閉" onclick="closeStudentEditModal()"></button>
+        </div>
+        <div class="modal-body">
+          <input id="studentEditIdInput" type="hidden">
+          <div class="row g-3">
+            <div class="col-12 col-md-4">
+              <label class="form-label fw-bold" for="studentEditGroupInput">group</label>
+              <input class="form-control" id="studentEditGroupInput" autocomplete="off">
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label fw-bold" for="studentEditRoleInput">role</label>
+              <input class="form-control" id="studentEditRoleInput" autocomplete="off">
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label fw-bold" for="studentEditUnitInput">unit</label>
+              <input class="form-control" id="studentEditUnitInput" autocomplete="off">
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-bold" for="studentEditNameInput">name</label>
+              <input class="form-control" id="studentEditNameInput" autocomplete="off">
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-bold" for="studentEditStudentNoInput">studentNo</label>
+              <input class="form-control" id="studentEditStudentNoInput" autocomplete="off">
+            </div>
+            <div class="col-12 col-md-8">
+              <label class="form-label fw-bold" for="studentEditUrlInput">url</label>
+              <input class="form-control" id="studentEditUrlInput" autocomplete="off">
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label fw-bold" for="studentEditSortOrderInput">sortOrder</label>
+              <input class="form-control" id="studentEditSortOrderInput" type="number" min="1" step="1">
+            </div>
+            <div class="col-12">
+              <div class="form-check form-switch">
+                <input class="form-check-input" id="studentEditActiveInput" type="checkbox">
+                <label class="form-check-label fw-bold" for="studentEditActiveInput">active</label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" type="button" onclick="closeStudentEditModal()">取消</button>
+          <button class="btn btn-primary" id="studentEditSaveButton" type="button" onclick="saveStudentEdit()">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="app-modal-backdrop" id="appModal" aria-hidden="true">
     <div class="app-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="appModalTitle">
       <div class="border-bottom px-3 py-2 d-flex justify-content-between align-items-center">
@@ -478,7 +539,7 @@
   </div>
 
 
-  <script src="./app.js?v=8" defer></script>
+  <script src="./app.js?v=9" defer></script>
 </body>
 
 </html>

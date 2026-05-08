@@ -121,6 +121,7 @@ function doPost(e) {
     if (action === 'importStudents') return respond_(importStudents_(body.payload || {}));
     if (action === 'importClasses') return respond_(importClasses_(body.payload || {}));
     if (action === 'updateClass') return respond_(updateClass_(body.payload || {}));
+    if (action === 'updateStudent') return respond_(updateStudent_(body.payload || {}));
     if (action === 'createSemester') return respond_(createSemester_(body.payload || {}));
     if (action === 'cloneSemester') return respond_(cloneSemester_(body.payload || {}));
     return respond_({ ok: false, error: 'Unknown action' });
@@ -188,8 +189,8 @@ function updateClass_(payload) {
     if (!classId) throw new Error('classId is required');
 
     const classes = readSheetObjects_(SHEETS.classes);
-    const index = classes.findIndex(row => semesterIdForRecord_(row) === semesterId && row.id === classId);
-    if (index < 0) throw new Error(`Class not found: ${classId}`);
+    const index = classes.findIndex(row => semesterIdForRecord_(row) === semesterId && String(row.id || '').trim() === classId);
+    if (index < 0) throw new Error(`Class not found for semesterId=${semesterId} and classId=${classId}`);
 
     const updatedClass = {
       ...classes[index],
@@ -197,7 +198,7 @@ function updateClass_(payload) {
       semesterId,
       date: String(payload.date || '').trim(),
       title: String(payload.title || '').trim(),
-      sortOrder: normalizeSortOrder_(payload.sortOrder, classes[index].sortOrder || index + 1)
+      sortOrder: requirePositiveInteger_(payload.sortOrder, 'sortOrder')
     };
     if (!updatedClass.date) throw new Error('date is required');
     if (!updatedClass.title) throw new Error('title is required');
@@ -206,6 +207,45 @@ function updateClass_(payload) {
     writeSheetRows_(SHEETS.classes, HEADERS.classes, classes);
     SpreadsheetApp.flush();
     return { ok: true, class: updatedClass };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function updateStudent_(payload) {
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+
+  try {
+    const semesterId = payload.semesterId || DEFAULT_SEMESTER_ID;
+    const studentId = String(payload.studentId || payload.id || '').trim();
+    if (!studentId) throw new Error('studentId is required');
+
+    const students = readSheetObjects_(SHEETS.students);
+    const index = students.findIndex(row => semesterIdForRecord_(row) === semesterId && String(row.id || '').trim() === studentId);
+    if (index < 0) throw new Error(`Student not found for semesterId=${semesterId} and studentId=${studentId}`);
+
+    const updatedStudent = {
+      ...students[index],
+      id: studentId,
+      semesterId,
+      group: String(payload.group || '').trim(),
+      role: String(payload.role || '').trim(),
+      unit: String(payload.unit || '').trim(),
+      name: String(payload.name || '').trim(),
+      studentNo: String(payload.studentNo || payload.idNo || '').trim(),
+      url: String(payload.url || '#').trim() || '#',
+      active: normalizeActive_(payload.active),
+      sortOrder: requirePositiveInteger_(payload.sortOrder, 'sortOrder')
+    };
+    if (!updatedStudent.group) throw new Error('group is required');
+    if (!updatedStudent.role) throw new Error('role is required');
+    if (!updatedStudent.name) throw new Error('name is required');
+
+    students[index] = updatedStudent;
+    writeSheetRows_(SHEETS.students, HEADERS.students, students);
+    SpreadsheetApp.flush();
+    return { ok: true, student: updatedStudent };
   } finally {
     lock.releaseLock();
   }
@@ -337,6 +377,20 @@ function normalizeImportedClasses_(rows, semesterId) {
 function normalizeSortOrder_(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function requirePositiveInteger_(value, fieldName) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number <= 0) {
+    throw new Error(`${fieldName} must be a positive integer`);
+  }
+  return number;
+}
+
+function normalizeActive_(value) {
+  if (value === false) return false;
+  const text = String(value === undefined || value === null || value === '' ? 'TRUE' : value).trim().toLowerCase();
+  return !['false', '0', 'no', '否', '停用'].includes(text);
 }
 
 function replaceSemesterRows_(sheetName, headers, semesterId, incomingRows) {

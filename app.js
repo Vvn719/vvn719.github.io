@@ -159,7 +159,7 @@ const DEFAULT_SEMESTERS = [
         const closeButton = document.getElementById('appModalCloseButton');
 
         if (!modal || !titleEl || !messageEl || !inputEl || !okButton || !cancelButton || !closeButton) {
-          resolve(options.input ? window.prompt(options.message || '', options.defaultValue || '') : true);
+          resolve(options.input || options.showCancel ? null : true);
           return;
         }
 
@@ -208,6 +208,14 @@ const DEFAULT_SEMESTERS = [
 
     function showMessage(message, title = '提醒', options = {}) {
       return showAppModal({ ...options, title, message });
+    }
+
+    function showSuccessMessage(message, title = '完成') {
+      return showMessage(message, title, { okClass: 'btn-success' });
+    }
+
+    function showErrorMessage(message, title = '發生錯誤') {
+      return showMessage(message, title, { okClass: 'btn-danger' });
     }
 
     function showConfirm(message, title = '請確認', options = {}) {
@@ -786,6 +794,7 @@ const DEFAULT_SEMESTERS = [
 
     function closeAdminModal() {
       closeClassEditModal();
+      closeStudentEditModal();
       document.getElementById('adminModal').classList.remove('show');
       document.getElementById('adminModal').setAttribute('aria-hidden', 'true');
       document.body.classList.remove('admin-modal-open');
@@ -827,9 +836,23 @@ const DEFAULT_SEMESTERS = [
         </div>`;
     }
 
+    function isPositiveInteger(value) {
+      const number = Number(value);
+      return Number.isInteger(number) && number > 0;
+    }
+
     function renderClassEditButton(row) {
       const encodedId = escapeHtml(JSON.stringify(row.id));
       return `<button class="btn btn-sm btn-outline-primary" type="button" onclick='openClassEditModal(${encodedId})'>編輯</button>`;
+    }
+
+    function renderStudentActionButtons(row) {
+      const encodedId = escapeHtml(JSON.stringify(row.apiId));
+      return `
+        <div class="d-flex flex-wrap gap-2 justify-content-end">
+          <button class="btn btn-sm btn-outline-primary" type="button" onclick='openStudentEditModal(${encodedId})'>編輯</button>
+          <button class="btn btn-sm btn-outline-danger" type="button" onclick='disableStudent(${encodedId})'>停用</button>
+        </div>`;
     }
 
     function renderAdminOverview() {
@@ -845,11 +868,13 @@ const DEFAULT_SEMESTERS = [
         };
       });
       const studentRows = currentStudents.map(student => ({
+        apiId: student.apiId,
         group: student.group,
         role: student.role,
         unit: student.unit,
         name: student.name,
-        id: student.id || student.apiId
+        id: student.id || student.apiId,
+        sortOrder: student.sortOrder
       }));
       const classRows = currentClasses.map(item => ({
         id: item.id,
@@ -890,7 +915,9 @@ const DEFAULT_SEMESTERS = [
           { key: 'role', label: '角色' },
           { key: 'unit', label: '單位' },
           { key: 'name', label: '姓名' },
-          { key: 'id', label: 'id / 學號' }
+          { key: 'id', label: 'id / 學號' },
+          { key: 'sortOrder', label: '排序' },
+          { key: 'actions', label: '操作', render: renderStudentActionButtons }
         ], '目前學期沒有學生')}
       `;
     }
@@ -937,20 +964,23 @@ const DEFAULT_SEMESTERS = [
       if (!date) {
         setAdminStatus('課程日期不可空白', 'danger');
         document.getElementById('classEditDateInput').focus();
+        await showErrorMessage('date 不可空白。', '表單資料錯誤');
         return;
       }
       if (!title) {
         setAdminStatus('課程名稱不可空白', 'danger');
         document.getElementById('classEditTitleInput').focus();
+        await showErrorMessage('title 不可空白。', '表單資料錯誤');
         return;
       }
-      if (!Number.isFinite(sortOrder) || sortOrder <= 0) {
-        setAdminStatus('sortOrder 必須是大於 0 的數字', 'danger');
+      if (!isPositiveInteger(sortOrderValue)) {
+        setAdminStatus('sortOrder 必須是大於 0 的整數', 'danger');
         document.getElementById('classEditSortOrderInput').focus();
+        await showErrorMessage('sortOrder 必須是大於 0 的整數。', '表單資料錯誤');
         return;
       }
       if (!apiUrl) {
-        await showMessage('請先設定 Apps Script API URL', '尚未設定 API');
+        await showErrorMessage('請先設定 Apps Script API URL。', '尚未設定 API');
         configureApi();
         return;
       }
@@ -959,6 +989,7 @@ const DEFAULT_SEMESTERS = [
       button.disabled = true;
       button.textContent = '儲存中...';
       setAdminStatus('課程更新中', 'warning');
+      setSubmitLoading(true, '課程儲存中，請稍候...');
 
       try {
         const result = await postApi('updateClass', {
@@ -973,11 +1004,194 @@ const DEFAULT_SEMESTERS = [
         await reloadFromApi({ semesterId: currentSemesterId, keepSemester: true, throwOnError: true, force: true });
         renderAdminOverview();
         setAdminStatus('課程已更新並重新同步', 'success');
+        setSubmitLoading(false);
+        await showSuccessMessage('課程已更新，並重新同步目前學期。', '課程更新完成');
       } catch (error) {
         console.error(error);
         button.disabled = false;
         button.textContent = '儲存';
         setAdminStatus(`課程更新失敗：${error.message}`, 'danger');
+        setSubmitLoading(false);
+        await showErrorMessage(`課程更新失敗：${error.message}`, '課程更新失敗');
+      } finally {
+        setSubmitLoading(false);
+      }
+    }
+
+    function studentById(studentId) {
+      return currentStudents.find(item => item.apiId === studentId);
+    }
+
+    function openStudentEditModal(studentId) {
+      const student = studentById(studentId);
+      if (!student) {
+        setAdminStatus(`找不到學生：${studentId}`, 'danger');
+        return;
+      }
+
+      document.getElementById('studentEditIdInput').value = student.apiId;
+      document.getElementById('studentEditGroupInput').value = student.group || '';
+      document.getElementById('studentEditRoleInput').value = student.role || '';
+      document.getElementById('studentEditUnitInput').value = student.unit || '';
+      document.getElementById('studentEditNameInput').value = student.name || '';
+      document.getElementById('studentEditStudentNoInput').value = student.id || '';
+      document.getElementById('studentEditUrlInput').value = student.url || '#';
+      document.getElementById('studentEditSortOrderInput').value = student.sortOrder || '';
+      document.getElementById('studentEditActiveInput').checked = student.active !== false;
+      document.getElementById('studentEditMeta').textContent = `${currentSemesterLabel()} / ${student.apiId}`;
+      document.getElementById('studentEditSaveButton').disabled = false;
+      document.getElementById('studentEditSaveButton').textContent = '儲存';
+      document.getElementById('studentEditModal').classList.add('show');
+      document.getElementById('studentEditModal').setAttribute('aria-hidden', 'false');
+      document.getElementById('studentEditGroupInput').focus();
+    }
+
+    function closeStudentEditModal() {
+      document.getElementById('studentEditModal').classList.remove('show');
+      document.getElementById('studentEditModal').setAttribute('aria-hidden', 'true');
+    }
+
+    function handleStudentEditBackdrop(event) {
+      if (event.target.id === 'studentEditModal') closeStudentEditModal();
+    }
+
+    function studentEditPayload(activeOverride = null) {
+      const activeInput = document.getElementById('studentEditActiveInput');
+      return {
+        semesterId: currentSemesterId,
+        studentId: document.getElementById('studentEditIdInput').value,
+        group: document.getElementById('studentEditGroupInput').value.trim(),
+        role: document.getElementById('studentEditRoleInput').value.trim(),
+        unit: document.getElementById('studentEditUnitInput').value.trim(),
+        name: document.getElementById('studentEditNameInput').value.trim(),
+        studentNo: document.getElementById('studentEditStudentNoInput').value.trim(),
+        url: document.getElementById('studentEditUrlInput').value.trim() || '#',
+        sortOrder: Number(document.getElementById('studentEditSortOrderInput').value),
+        active: activeOverride === null ? activeInput.checked : activeOverride
+      };
+    }
+
+    function studentPayloadFromRecord(student, activeOverride = null) {
+      return {
+        semesterId: currentSemesterId,
+        studentId: student.apiId,
+        group: student.group || '',
+        role: student.role || '',
+        unit: student.unit || '',
+        name: student.name || '',
+        studentNo: student.id || '',
+        url: student.url || '#',
+        sortOrder: Number(student.sortOrder || 1),
+        active: activeOverride === null ? student.active !== false : activeOverride
+      };
+    }
+
+    async function validateStudentPayload(payload) {
+      if (!payload.group) {
+        setAdminStatus('group 不可空白', 'danger');
+        document.getElementById('studentEditGroupInput').focus();
+        await showErrorMessage('group 不可空白。', '表單資料錯誤');
+        return false;
+      }
+      if (!payload.role) {
+        setAdminStatus('role 不可空白', 'danger');
+        document.getElementById('studentEditRoleInput').focus();
+        await showErrorMessage('role 不可空白。', '表單資料錯誤');
+        return false;
+      }
+      if (!payload.name) {
+        setAdminStatus('name 不可空白', 'danger');
+        document.getElementById('studentEditNameInput').focus();
+        await showErrorMessage('name 不可空白。', '表單資料錯誤');
+        return false;
+      }
+      if (!isPositiveInteger(payload.sortOrder)) {
+        setAdminStatus('sortOrder 必須是大於 0 的整數', 'danger');
+        document.getElementById('studentEditSortOrderInput').focus();
+        await showErrorMessage('sortOrder 必須是大於 0 的整數。', '表單資料錯誤');
+        return false;
+      }
+      return true;
+    }
+
+    async function syncAfterAdminMutation(successStatus) {
+      await reloadFromApi({ semesterId: currentSemesterId, keepSemester: true, throwOnError: true, force: true });
+      renderAdminOverview();
+      setAdminStatus(successStatus, 'success');
+    }
+
+    async function saveStudentEdit() {
+      const payload = studentEditPayload();
+      if (!await validateStudentPayload(payload)) return;
+      if (!apiUrl) {
+        await showErrorMessage('請先設定 Apps Script API URL。', '尚未設定 API');
+        configureApi();
+        return;
+      }
+
+      const button = document.getElementById('studentEditSaveButton');
+      button.disabled = true;
+      button.textContent = '儲存中...';
+      setAdminStatus('學生更新中', 'warning');
+      setSubmitLoading(true, '學生儲存中，請稍候...');
+
+      try {
+        const result = await postApi('updateStudent', payload);
+        if (result && result.ok === false) throw new Error(result.error || '學生更新失敗');
+        closeStudentEditModal();
+        await syncAfterAdminMutation('學生已更新並重新同步');
+        setSubmitLoading(false);
+        await showSuccessMessage('學生資料已更新，並重新同步目前學期。', '學生更新完成');
+      } catch (error) {
+        console.error(error);
+        button.disabled = false;
+        button.textContent = '儲存';
+        setAdminStatus(`學生更新失敗：${error.message}`, 'danger');
+        setSubmitLoading(false);
+        await showErrorMessage(`學生更新失敗：${error.message}`, '學生更新失敗');
+      } finally {
+        setSubmitLoading(false);
+      }
+    }
+
+    async function disableStudent(studentId) {
+      const student = studentById(studentId);
+      if (!student) {
+        await showErrorMessage(`找不到學生：${studentId}`, '停用失敗');
+        return;
+      }
+      if (!apiUrl) {
+        await showErrorMessage('請先設定 Apps Script API URL。', '尚未設定 API');
+        configureApi();
+        return;
+      }
+
+      const confirmed = await showAppModal({
+        title: '停用學生',
+        message: `確定要停用 ${student.name} 嗎？\n停用不會刪除歷史 attendance，重新同步後點名名單將不顯示此學生。`,
+        showCancel: true,
+        okText: '停用',
+        cancelText: '取消',
+        okClass: 'btn-danger'
+      });
+      if (!confirmed) return;
+
+      setAdminStatus('學生停用中', 'warning');
+      setSubmitLoading(true, '學生停用中，請稍候...');
+
+      try {
+        const result = await postApi('updateStudent', studentPayloadFromRecord(student, false));
+        if (result && result.ok === false) throw new Error(result.error || '學生停用失敗');
+        await syncAfterAdminMutation('學生已停用並重新同步');
+        setSubmitLoading(false);
+        await showSuccessMessage('學生已停用；歷史 attendance 已保留。', '學生已停用');
+      } catch (error) {
+        console.error(error);
+        setAdminStatus(`學生停用失敗：${error.message}`, 'danger');
+        setSubmitLoading(false);
+        await showErrorMessage(`學生停用失敗：${error.message}`, '學生停用失敗');
+      } finally {
+        setSubmitLoading(false);
       }
     }
 
@@ -2074,6 +2288,7 @@ const DEFAULT_SEMESTERS = [
     });
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && document.getElementById('classEditModal').classList.contains('show')) closeClassEditModal();
+      if (event.key === 'Escape' && document.getElementById('studentEditModal').classList.contains('show')) closeStudentEditModal();
       if (event.key === 'Escape' && document.getElementById('adminModal').classList.contains('show')) closeAdminModal();
     });
     document.addEventListener('visibilitychange', () => {

@@ -52,6 +52,11 @@
   - 修改 `date`、`title` 或 `sortOrder` 後儲存。
   - 確認 Google Sheet `classes` 有更新，且 `attendance` 沒有被改動。
   - 確認前端已重新同步目前學期。
+- [ ] 管理模式學生單筆編輯與停用測試。
+  - 在「目前學期」學生名單按「編輯」，修改 `group`、`role`、`unit`、`name`、`studentNo`、`url`、`sortOrder` 或 `active` 後儲存。
+  - 確認 Google Sheet `students` 只更新目前學期該學生，且 `attendance` 沒有被改動。
+  - 按「停用」後確認 `active` 變成 `FALSE`，重新同步後點名名單不顯示該學生。
+  - 確認該學生歷史 attendance 仍留在 Google Sheet。
 - [ ] 複製學期測試。
   - 在「管理」的學期管理中選擇來源學期。
   - 輸入新的 `semesterId` 與名稱。
