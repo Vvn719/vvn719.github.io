@@ -1,0 +1,300 @@
+body {
+  background: #f6f7fb;
+}
+
+.student-card {
+  transition: 0.15s ease;
+  cursor: pointer;
+  border-width: 2px;
+}
+
+.student-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.08);
+}
+
+.student-card.checked {
+  background: #eaf7ee;
+  border-color: #8fd19e;
+}
+
+.student-card.absent {
+  background: #f1f3f5;
+  border-color: #adb5bd;
+}
+
+.student-card.done {
+  opacity: 0.72;
+}
+
+.student-card.excluded {
+  background: #f8f9fa;
+  border-style: dashed;
+  opacity: 0.55;
+}
+
+.role-badge {
+  min-width: 3.4rem;
+}
+
+.status-line {
+  min-height: 1.6rem;
+}
+
+.special-actions .btn {
+  min-width: 4.2rem;
+}
+
+.summary-card {
+  border-left: 5px solid #0d6efd;
+}
+
+.name-warning {
+  color: #fd7e14;
+}
+
+.name-danger {
+  color: #dc3545;
+}
+
+.sticky-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  background: rgba(246, 247, 251, 0.96);
+  backdrop-filter: blur(6px);
+}
+
+.quick-nav {
+  position: fixed;
+  right: 0.75rem;
+  top: 45%;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.quick-nav .btn {
+  width: 2.7rem;
+  height: 2.7rem;
+  border-radius: 999px;
+  box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.15);
+}
+
+body.admin-modal-open {
+  overflow: hidden;
+}
+
+.admin-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.admin-backdrop.show {
+  display: flex;
+}
+
+.admin-dialog {
+  width: min(980px, 100%);
+  max-height: min(88vh, 820px);
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: #fff;
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.22);
+}
+
+.admin-body {
+  max-height: calc(min(88vh, 820px) - 4.4rem);
+  overflow: auto;
+}
+
+.admin-tab-panel {
+  display: none;
+}
+
+.admin-tab-panel.active {
+  display: block;
+}
+
+.admin-preview-table {
+  max-height: 22rem;
+  overflow: auto;
+}
+
+.admin-preview-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8f9fa;
+}
+
+.app-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1090;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.app-modal-backdrop.show {
+  display: flex;
+}
+
+.app-modal-dialog {
+  width: min(420px, 100%);
+  border-radius: 0.75rem;
+  background: #fff;
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+}
+
+.edit-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1065;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.edit-modal-backdrop.show {
+  display: flex;
+}
+
+.edit-modal-dialog {
+  width: min(520px, 100%);
+  max-height: min(90vh, 760px);
+  margin: 0;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: #fff;
+  box-shadow: 0 1.25rem 3rem rgba(0, 0, 0, 0.28);
+}
+
+.edit-modal-content {
+  display: flex;
+  max-height: inherit;
+  flex-direction: column;
+  background: #fff;
+}
+
+.edit-modal-body {
+  overflow: auto;
+}
+
+.edit-modal-dialog {
+  max-height: inherit;
+  background: #fff;
+}
+
+.edit-modal-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e9ecef;
+  background: #f8fbff;
+}
+
+.edit-modal-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.edit-modal-subtitle {
+  margin-top: 0.25rem;
+  font-size: 0.9rem;
+  color: #6c757d;
+}
+
+.edit-modal-body {
+  padding: 1.25rem;
+  overflow: auto;
+}
+
+.edit-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid #e9ecef;
+  background: #fff;
+}
+
+.edit-help-text {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: #6c757d;
+}
+
+#classEditError {
+  display: none;
+}
+
+#classEditError.show {
+  display: block;
+}
+
+.app-modal-message {
+  white-space: pre-line;
+}
+
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(3px);
+}
+
+.loading-overlay.show {
+  display: flex;
+}
+
+.loading-card {
+  min-width: 220px;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.2);
+}
+
+@media (max-width: 576px) {
+  .student-id,
+  .unit {
+    font-size: 0.85rem;
+  }
+
+  .btn-wide {
+    width: 100%;
+  }
+
+  .table-summary th,
+  .table-summary td {
+    font-size: 0.85rem;
+  }
+
+  .quick-nav {
+    right: 0.5rem;
+    top: auto;
+    bottom: 5.5rem;
+  }
+
+  .quick-nav .btn {
+    width: 2.4rem;
+    height: 2.4rem;
+    padding: 0;
+  }
+}

@@ -7,258 +7,8 @@
   <title>基礎忠恕學界班 報到系統</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js" defer></script>
-  <style>
-    body {
-      background: #f6f7fb;
-    }
+  <link rel="stylesheet" href="defalt.css">
 
-    .student-card {
-      transition: .15s ease;
-      cursor: pointer;
-      border-width: 2px;
-    }
-
-    .student-card:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 .35rem 1rem rgba(0, 0, 0, .08);
-    }
-
-    .student-card.checked {
-      background: #eaf7ee;
-      border-color: #8fd19e;
-    }
-
-    .student-card.absent {
-      background: #f1f3f5;
-      border-color: #adb5bd;
-    }
-
-    .student-card.done {
-      opacity: .72;
-    }
-
-    .student-card.excluded {
-      background: #f8f9fa;
-      border-style: dashed;
-      opacity: .55;
-    }
-
-    .role-badge {
-      min-width: 3.4rem;
-    }
-
-    .status-line {
-      min-height: 1.6rem;
-    }
-
-    .special-actions .btn {
-      min-width: 4.2rem;
-    }
-
-    .summary-card {
-      border-left: 5px solid #0d6efd;
-    }
-
-    .name-warning {
-      color: #fd7e14;
-    }
-
-    .name-danger {
-      color: #dc3545;
-    }
-
-    .sticky-actions {
-      position: sticky;
-      bottom: 0;
-      z-index: 10;
-      background: rgba(246, 247, 251, .96);
-      backdrop-filter: blur(6px);
-    }
-
-    .quick-nav {
-      position: fixed;
-      right: .75rem;
-      top: 45%;
-      z-index: 20;
-      display: flex;
-      flex-direction: column;
-      gap: .4rem;
-    }
-
-    .quick-nav .btn {
-      width: 2.7rem;
-      height: 2.7rem;
-      border-radius: 999px;
-      box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .15);
-    }
-
-    body.admin-modal-open {
-      overflow: hidden;
-    }
-
-    .admin-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 1050;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 1rem;
-      background: rgba(15, 23, 42, .5);
-    }
-
-    .admin-backdrop.show {
-      display: flex;
-    }
-
-    .admin-dialog {
-      width: min(980px, 100%);
-      max-height: min(88vh, 820px);
-      overflow: hidden;
-      border-radius: .5rem;
-      background: #fff;
-      box-shadow: 0 1rem 3rem rgba(0, 0, 0, .22);
-    }
-
-    .admin-body {
-      max-height: calc(min(88vh, 820px) - 4.4rem);
-      overflow: auto;
-    }
-
-    .admin-tab-panel {
-      display: none;
-    }
-
-    .admin-tab-panel.active {
-      display: block;
-    }
-
-    .admin-preview-table {
-      max-height: 22rem;
-      overflow: auto;
-    }
-
-    .admin-preview-table th {
-      position: sticky;
-      top: 0;
-      z-index: 1;
-      background: #f8f9fa;
-    }
-
-    .app-modal-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 1090;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 1rem;
-      background: rgba(15, 23, 42, .48);
-    }
-
-    .app-modal-backdrop.show {
-      display: flex;
-    }
-
-    .app-modal-dialog {
-      width: min(420px, 100%);
-      border-radius: .75rem;
-      background: #fff;
-      box-shadow: 0 1rem 3rem rgba(0, 0, 0, .22);
-      overflow: hidden;
-    }
-
-    .edit-modal-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 1065;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 1rem;
-      background: rgba(15, 23, 42, .55);
-    }
-
-    .edit-modal-backdrop.show {
-      display: flex;
-    }
-
-    .edit-modal-dialog {
-      width: min(520px, 100%);
-      max-height: min(90vh, 760px);
-      margin: 0;
-      overflow: hidden;
-      border-radius: .5rem;
-      background: #fff;
-      box-shadow: 0 1.25rem 3rem rgba(0, 0, 0, .28);
-    }
-
-    .edit-modal-content {
-      display: flex;
-      max-height: inherit;
-      flex-direction: column;
-      background: #fff;
-    }
-
-    .edit-modal-body {
-      overflow: auto;
-    }
-
-    .app-modal-message {
-      white-space: pre-line;
-    }
-
-    .loading-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 2000;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      background: rgba(15, 23, 42, .45);
-      backdrop-filter: blur(3px);
-    }
-
-    .loading-overlay.show {
-      display: flex;
-    }
-
-    .loading-card {
-      min-width: 220px;
-      border-radius: 1rem;
-      background: #fff;
-      box-shadow: 0 1rem 3rem rgba(0, 0, 0, .2);
-    }
-
-    @media (max-width: 576px) {
-
-      .student-id,
-      .unit {
-        font-size: .85rem;
-      }
-
-      .btn-wide {
-        width: 100%;
-      }
-
-      .table-summary th,
-      .table-summary td {
-        font-size: .85rem;
-      }
-
-      .quick-nav {
-        right: .5rem;
-        top: auto;
-        bottom: 5.5rem;
-      }
-
-      .quick-nav .btn {
-        width: 2.4rem;
-        height: 2.4rem;
-        padding: 0;
-      }
-    }
-  </style>
 </head>
 
 <body>
@@ -454,35 +204,77 @@
   <div class="edit-modal-backdrop" id="classEditModal" aria-hidden="true" onclick="handleClassEditBackdrop(event)">
     <div class="edit-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="classEditTitle">
       <div class="edit-modal-content">
-        <div class="modal-header">
+
+        <div class="edit-modal-header d-flex justify-content-between align-items-start">
           <div>
-            <h5 class="modal-title fw-bold" id="classEditTitle">編輯課程</h5>
-            <div class="small text-muted" id="classEditMeta"></div>
+            <h5 class="edit-modal-title" id="classEditTitle">編輯課程</h5>
+            <div class="edit-modal-subtitle" id="classEditMeta"></div>
           </div>
-          <button class="btn-close" type="button" aria-label="關閉" onclick="closeClassEditModal()"></button>
+
+          <button class="btn-close" type="button" aria-label="關閉" onclick="closeClassEditModal()">
+          </button>
         </div>
-        <div class="modal-body edit-modal-body">
+
+        <div class="edit-modal-body">
+
+          <div class="alert alert-danger mb-3" id="classEditError"></div>
+
           <input id="classEditIdInput" type="hidden">
-          <div class="mb-3">
-            <label class="form-label fw-bold" for="classEditDateInput">date</label>
-            <input class="form-control" id="classEditDateInput" autocomplete="off">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-bold" for="classEditTitleInput">title</label>
-            <input class="form-control" id="classEditTitleInput" autocomplete="off">
-          </div>
-          <div class="mb-0">
-            <label class="form-label fw-bold" for="classEditSortOrderInput">sortOrder</label>
-            <input class="form-control" id="classEditSortOrderInput" type="number" min="1" step="1">
+
+          <div class="row g-3">
+
+            <div class="col-12 col-md-4">
+              <label class="form-label fw-bold" for="classEditDateInput">
+                上課日期
+              </label>
+
+              <input class="form-control" id="classEditDateInput" autocomplete="off" placeholder="例如：5/17">
+
+              <div class="edit-help-text">
+                例如：5/17 或 5/30（六）
+              </div>
+            </div>
+
+            <div class="col-12 col-md-3">
+              <label class="form-label fw-bold" for="classEditSortOrderInput">
+                排序
+              </label>
+
+              <input class="form-control" id="classEditSortOrderInput" type="number" min="1" step="1" placeholder="1">
+
+              <div class="edit-help-text">
+                數字越小越前面
+              </div>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label fw-bold" for="classEditTitleInput">
+                課程名稱
+              </label>
+
+              <input class="form-control form-control-lg" id="classEditTitleInput" autocomplete="off"
+                placeholder="請輸入課程名稱">
+            </div>
+
           </div>
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-outline-secondary" type="button" onclick="closeClassEditModal()">取消</button>
-          <button class="btn btn-primary" id="classEditSaveButton" type="button" onclick="saveClassEdit()">儲存</button>
+
+        <div class="edit-modal-footer">
+          <button class="btn btn-outline-secondary" type="button" onclick="closeClassEditModal()">
+            取消
+          </button>
+
+          <button class="btn btn-primary px-4" id="classEditSaveButton" type="button" onclick="saveClassEdit()">
+            儲存修改
+          </button>
         </div>
+
       </div>
     </div>
   </div>
+
+
+
 
   <div class="app-modal-backdrop" id="appModal" aria-hidden="true">
     <div class="app-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="appModalTitle">
