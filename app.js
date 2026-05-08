@@ -89,7 +89,7 @@ const API_URL_STORAGE_KEY = 'attendanceApiUrl'
 const SELECTED_SEMESTER_STORAGE_KEY = 'attendanceSelectedSemesterId'
 const SEMESTERS_CACHE_KEY = 'attendanceSemestersCache:v2'
 const DATA_CACHE_PREFIX = 'attendanceDataCache:v2'
-const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbzQx3i4ux_3m5J8FP3GQ19KE6PO9_-bJy3F0MQwrKSmjuddat3Apjr9_a2njTduRt1bXg/exec'
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbwSwUZxctkSOIQdDXEYK_zwHigANT0Lsn_JBcotxESiJPUAWN74mgOHiMUMm82XoMNpsQ/exec'
 const API_TOKEN = 'vvn719-attendance-token'
 const API_AUTH_ERROR_MESSAGE = 'API 驗證失敗，請檢查設定'
 let apiUrl = resolveApiUrl()
@@ -2276,17 +2276,11 @@ async function submitAttendance() {
   const finalMessage = authFailed
     ? API_AUTH_ERROR_MESSAGE
     : saveFailed
-    ? `${message}\n本機已更新，但 Google Sheet 儲存失敗，請再按一次送出或同步後確認。`
-    : formSubmissionFailed
-      ? '點名已保存，但部分 Google Form 送出失敗'
-      : message
-  const finalTitle = authFailed
-    ? 'API 驗證失敗'
-    : saveFailed
-      ? '送出完成但雲端儲存失敗'
+      ? `${message}\n本機已更新，但 Google Sheet 儲存失敗，請再按一次送出或同步後確認。`
       : formSubmissionFailed
-        ? '表單部分失敗'
-        : '送出完成'
+        ? '點名已保存，但部分 Google Form 送出失敗'
+        : message
+  const finalTitle = authFailed ? 'API 驗證失敗' : saveFailed ? '送出完成但雲端儲存失敗' : formSubmissionFailed ? '表單部分失敗' : '送出完成'
   await showMessage(finalMessage, finalTitle)
 }
 
