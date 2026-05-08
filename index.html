@@ -148,7 +148,7 @@
     .app-modal-backdrop {
       position: fixed;
       inset: 0;
-      z-index: 1060;
+      z-index: 1090;
       display: none;
       align-items: center;
       justify-content: center;
@@ -168,13 +168,40 @@
       overflow: hidden;
     }
 
-    .app-modal-backdrop .modal-dialog {
-      width: min(520px, 100%);
-      margin: 0;
+    .edit-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 1065;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      background: rgba(15, 23, 42, .55);
     }
 
-    .app-modal-backdrop .modal-dialog.modal-lg {
-      width: min(760px, 100%);
+    .edit-modal-backdrop.show {
+      display: flex;
+    }
+
+    .edit-modal-dialog {
+      width: min(520px, 100%);
+      max-height: min(90vh, 760px);
+      margin: 0;
+      overflow: hidden;
+      border-radius: .5rem;
+      background: #fff;
+      box-shadow: 0 1.25rem 3rem rgba(0, 0, 0, .28);
+    }
+
+    .edit-modal-content {
+      display: flex;
+      max-height: inherit;
+      flex-direction: column;
+      background: #fff;
+    }
+
+    .edit-modal-body {
+      overflow: auto;
     }
 
     .app-modal-message {
@@ -424,9 +451,9 @@
   </div>
 
 
-  <div class="app-modal-backdrop" id="classEditModal" aria-hidden="true" onclick="handleClassEditBackdrop(event)">
-    <div class="modal-dialog modal-dialog-centered" role="dialog" aria-modal="true" aria-labelledby="classEditTitle">
-      <div class="modal-content">
+  <div class="edit-modal-backdrop" id="classEditModal" aria-hidden="true" onclick="handleClassEditBackdrop(event)">
+    <div class="edit-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="classEditTitle">
+      <div class="edit-modal-content">
         <div class="modal-header">
           <div>
             <h5 class="modal-title fw-bold" id="classEditTitle">編輯課程</h5>
@@ -434,7 +461,7 @@
           </div>
           <button class="btn-close" type="button" aria-label="關閉" onclick="closeClassEditModal()"></button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body edit-modal-body">
           <input id="classEditIdInput" type="hidden">
           <div class="mb-3">
             <label class="form-label fw-bold" for="classEditDateInput">date</label>
@@ -452,63 +479,6 @@
         <div class="modal-footer">
           <button class="btn btn-outline-secondary" type="button" onclick="closeClassEditModal()">取消</button>
           <button class="btn btn-primary" id="classEditSaveButton" type="button" onclick="saveClassEdit()">儲存</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="app-modal-backdrop" id="studentEditModal" aria-hidden="true" onclick="handleStudentEditBackdrop(event)">
-    <div class="modal-dialog modal-dialog-centered modal-lg" role="dialog" aria-modal="true" aria-labelledby="studentEditTitle">
-      <div class="modal-content">
-        <div class="modal-header">
-          <div>
-            <h5 class="modal-title fw-bold" id="studentEditTitle">編輯學生</h5>
-            <div class="small text-muted" id="studentEditMeta"></div>
-          </div>
-          <button class="btn-close" type="button" aria-label="關閉" onclick="closeStudentEditModal()"></button>
-        </div>
-        <div class="modal-body">
-          <input id="studentEditIdInput" type="hidden">
-          <div class="row g-3">
-            <div class="col-12 col-md-4">
-              <label class="form-label fw-bold" for="studentEditGroupInput">group</label>
-              <input class="form-control" id="studentEditGroupInput" autocomplete="off">
-            </div>
-            <div class="col-12 col-md-4">
-              <label class="form-label fw-bold" for="studentEditRoleInput">role</label>
-              <input class="form-control" id="studentEditRoleInput" autocomplete="off">
-            </div>
-            <div class="col-12 col-md-4">
-              <label class="form-label fw-bold" for="studentEditUnitInput">unit</label>
-              <input class="form-control" id="studentEditUnitInput" autocomplete="off">
-            </div>
-            <div class="col-12 col-md-6">
-              <label class="form-label fw-bold" for="studentEditNameInput">name</label>
-              <input class="form-control" id="studentEditNameInput" autocomplete="off">
-            </div>
-            <div class="col-12 col-md-6">
-              <label class="form-label fw-bold" for="studentEditStudentNoInput">studentNo</label>
-              <input class="form-control" id="studentEditStudentNoInput" autocomplete="off">
-            </div>
-            <div class="col-12 col-md-8">
-              <label class="form-label fw-bold" for="studentEditUrlInput">url</label>
-              <input class="form-control" id="studentEditUrlInput" autocomplete="off">
-            </div>
-            <div class="col-12 col-md-4">
-              <label class="form-label fw-bold" for="studentEditSortOrderInput">sortOrder</label>
-              <input class="form-control" id="studentEditSortOrderInput" type="number" min="1" step="1">
-            </div>
-            <div class="col-12">
-              <div class="form-check form-switch">
-                <input class="form-check-input" id="studentEditActiveInput" type="checkbox">
-                <label class="form-check-label fw-bold" for="studentEditActiveInput">active</label>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-outline-secondary" type="button" onclick="closeStudentEditModal()">取消</button>
-          <button class="btn btn-primary" id="studentEditSaveButton" type="button" onclick="saveStudentEdit()">儲存</button>
         </div>
       </div>
     </div>
@@ -539,7 +509,7 @@
   </div>
 
 
-  <script src="./app.js?v=9" defer></script>
+  <script src="./app.js?v=10" defer></script>
 </body>
 
 </html>

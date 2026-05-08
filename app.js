@@ -86,7 +86,7 @@ const DEFAULT_SEMESTERS = [
     const SELECTED_SEMESTER_STORAGE_KEY = 'attendanceSelectedSemesterId';
     const SEMESTERS_CACHE_KEY = 'attendanceSemestersCache:v2';
     const DATA_CACHE_PREFIX = 'attendanceDataCache:v2';
-    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbzF6ygWMq41bf_to4gYg3YWiBhyOiQiC9t8cfEwe28i2fS4hpKUgd7VGQT6ZzFrMos6VQ/exec';
+    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbybj0ZCnebWSqiWlFw_VuR2c9ZsufAKH5rDuks4nH-9hcdxXJkK31UaY7xvTswwGc0ZUQ/exec';
     let apiUrl = resolveApiUrl();
     let currentSemesterId = localStorage.getItem(SELECTED_SEMESTER_STORAGE_KEY) || DEFAULT_SEMESTERS[0].id;
     let syncInFlight = null;
@@ -794,7 +794,6 @@ const DEFAULT_SEMESTERS = [
 
     function closeAdminModal() {
       closeClassEditModal();
-      closeStudentEditModal();
       document.getElementById('adminModal').classList.remove('show');
       document.getElementById('adminModal').setAttribute('aria-hidden', 'true');
       document.body.classList.remove('admin-modal-open');
@@ -846,15 +845,6 @@ const DEFAULT_SEMESTERS = [
       return `<button class="btn btn-sm btn-outline-primary" type="button" onclick='openClassEditModal(${encodedId})'>編輯</button>`;
     }
 
-    function renderStudentActionButtons(row) {
-      const encodedId = escapeHtml(JSON.stringify(row.apiId));
-      return `
-        <div class="d-flex flex-wrap gap-2 justify-content-end">
-          <button class="btn btn-sm btn-outline-primary" type="button" onclick='openStudentEditModal(${encodedId})'>編輯</button>
-          <button class="btn btn-sm btn-outline-danger" type="button" onclick='disableStudent(${encodedId})'>停用</button>
-        </div>`;
-    }
-
     function renderAdminOverview() {
       const semester = currentSemester();
       const groupRows = currentGroups().map(group => {
@@ -868,7 +858,6 @@ const DEFAULT_SEMESTERS = [
         };
       });
       const studentRows = currentStudents.map(student => ({
-        apiId: student.apiId,
         group: student.group,
         role: student.role,
         unit: student.unit,
@@ -916,8 +905,7 @@ const DEFAULT_SEMESTERS = [
           { key: 'unit', label: '單位' },
           { key: 'name', label: '姓名' },
           { key: 'id', label: 'id / 學號' },
-          { key: 'sortOrder', label: '排序' },
-          { key: 'actions', label: '操作', render: renderStudentActionButtons }
+          { key: 'sortOrder', label: '排序' }
         ], '目前學期沒有學生')}
       `;
     }
@@ -1013,183 +1001,6 @@ const DEFAULT_SEMESTERS = [
         setAdminStatus(`課程更新失敗：${error.message}`, 'danger');
         setSubmitLoading(false);
         await showErrorMessage(`課程更新失敗：${error.message}`, '課程更新失敗');
-      } finally {
-        setSubmitLoading(false);
-      }
-    }
-
-    function studentById(studentId) {
-      return currentStudents.find(item => item.apiId === studentId);
-    }
-
-    function openStudentEditModal(studentId) {
-      const student = studentById(studentId);
-      if (!student) {
-        setAdminStatus(`找不到學生：${studentId}`, 'danger');
-        return;
-      }
-
-      document.getElementById('studentEditIdInput').value = student.apiId;
-      document.getElementById('studentEditGroupInput').value = student.group || '';
-      document.getElementById('studentEditRoleInput').value = student.role || '';
-      document.getElementById('studentEditUnitInput').value = student.unit || '';
-      document.getElementById('studentEditNameInput').value = student.name || '';
-      document.getElementById('studentEditStudentNoInput').value = student.id || '';
-      document.getElementById('studentEditUrlInput').value = student.url || '#';
-      document.getElementById('studentEditSortOrderInput').value = student.sortOrder || '';
-      document.getElementById('studentEditActiveInput').checked = student.active !== false;
-      document.getElementById('studentEditMeta').textContent = `${currentSemesterLabel()} / ${student.apiId}`;
-      document.getElementById('studentEditSaveButton').disabled = false;
-      document.getElementById('studentEditSaveButton').textContent = '儲存';
-      document.getElementById('studentEditModal').classList.add('show');
-      document.getElementById('studentEditModal').setAttribute('aria-hidden', 'false');
-      document.getElementById('studentEditGroupInput').focus();
-    }
-
-    function closeStudentEditModal() {
-      document.getElementById('studentEditModal').classList.remove('show');
-      document.getElementById('studentEditModal').setAttribute('aria-hidden', 'true');
-    }
-
-    function handleStudentEditBackdrop(event) {
-      if (event.target.id === 'studentEditModal') closeStudentEditModal();
-    }
-
-    function studentEditPayload(activeOverride = null) {
-      const activeInput = document.getElementById('studentEditActiveInput');
-      return {
-        semesterId: currentSemesterId,
-        studentId: document.getElementById('studentEditIdInput').value,
-        group: document.getElementById('studentEditGroupInput').value.trim(),
-        role: document.getElementById('studentEditRoleInput').value.trim(),
-        unit: document.getElementById('studentEditUnitInput').value.trim(),
-        name: document.getElementById('studentEditNameInput').value.trim(),
-        studentNo: document.getElementById('studentEditStudentNoInput').value.trim(),
-        url: document.getElementById('studentEditUrlInput').value.trim() || '#',
-        sortOrder: Number(document.getElementById('studentEditSortOrderInput').value),
-        active: activeOverride === null ? activeInput.checked : activeOverride
-      };
-    }
-
-    function studentPayloadFromRecord(student, activeOverride = null) {
-      return {
-        semesterId: currentSemesterId,
-        studentId: student.apiId,
-        group: student.group || '',
-        role: student.role || '',
-        unit: student.unit || '',
-        name: student.name || '',
-        studentNo: student.id || '',
-        url: student.url || '#',
-        sortOrder: Number(student.sortOrder || 1),
-        active: activeOverride === null ? student.active !== false : activeOverride
-      };
-    }
-
-    async function validateStudentPayload(payload) {
-      if (!payload.group) {
-        setAdminStatus('group 不可空白', 'danger');
-        document.getElementById('studentEditGroupInput').focus();
-        await showErrorMessage('group 不可空白。', '表單資料錯誤');
-        return false;
-      }
-      if (!payload.role) {
-        setAdminStatus('role 不可空白', 'danger');
-        document.getElementById('studentEditRoleInput').focus();
-        await showErrorMessage('role 不可空白。', '表單資料錯誤');
-        return false;
-      }
-      if (!payload.name) {
-        setAdminStatus('name 不可空白', 'danger');
-        document.getElementById('studentEditNameInput').focus();
-        await showErrorMessage('name 不可空白。', '表單資料錯誤');
-        return false;
-      }
-      if (!isPositiveInteger(payload.sortOrder)) {
-        setAdminStatus('sortOrder 必須是大於 0 的整數', 'danger');
-        document.getElementById('studentEditSortOrderInput').focus();
-        await showErrorMessage('sortOrder 必須是大於 0 的整數。', '表單資料錯誤');
-        return false;
-      }
-      return true;
-    }
-
-    async function syncAfterAdminMutation(successStatus) {
-      await reloadFromApi({ semesterId: currentSemesterId, keepSemester: true, throwOnError: true, force: true });
-      renderAdminOverview();
-      setAdminStatus(successStatus, 'success');
-    }
-
-    async function saveStudentEdit() {
-      const payload = studentEditPayload();
-      if (!await validateStudentPayload(payload)) return;
-      if (!apiUrl) {
-        await showErrorMessage('請先設定 Apps Script API URL。', '尚未設定 API');
-        configureApi();
-        return;
-      }
-
-      const button = document.getElementById('studentEditSaveButton');
-      button.disabled = true;
-      button.textContent = '儲存中...';
-      setAdminStatus('學生更新中', 'warning');
-      setSubmitLoading(true, '學生儲存中，請稍候...');
-
-      try {
-        const result = await postApi('updateStudent', payload);
-        if (result && result.ok === false) throw new Error(result.error || '學生更新失敗');
-        closeStudentEditModal();
-        await syncAfterAdminMutation('學生已更新並重新同步');
-        setSubmitLoading(false);
-        await showSuccessMessage('學生資料已更新，並重新同步目前學期。', '學生更新完成');
-      } catch (error) {
-        console.error(error);
-        button.disabled = false;
-        button.textContent = '儲存';
-        setAdminStatus(`學生更新失敗：${error.message}`, 'danger');
-        setSubmitLoading(false);
-        await showErrorMessage(`學生更新失敗：${error.message}`, '學生更新失敗');
-      } finally {
-        setSubmitLoading(false);
-      }
-    }
-
-    async function disableStudent(studentId) {
-      const student = studentById(studentId);
-      if (!student) {
-        await showErrorMessage(`找不到學生：${studentId}`, '停用失敗');
-        return;
-      }
-      if (!apiUrl) {
-        await showErrorMessage('請先設定 Apps Script API URL。', '尚未設定 API');
-        configureApi();
-        return;
-      }
-
-      const confirmed = await showAppModal({
-        title: '停用學生',
-        message: `確定要停用 ${student.name} 嗎？\n停用不會刪除歷史 attendance，重新同步後點名名單將不顯示此學生。`,
-        showCancel: true,
-        okText: '停用',
-        cancelText: '取消',
-        okClass: 'btn-danger'
-      });
-      if (!confirmed) return;
-
-      setAdminStatus('學生停用中', 'warning');
-      setSubmitLoading(true, '學生停用中，請稍候...');
-
-      try {
-        const result = await postApi('updateStudent', studentPayloadFromRecord(student, false));
-        if (result && result.ok === false) throw new Error(result.error || '學生停用失敗');
-        await syncAfterAdminMutation('學生已停用並重新同步');
-        setSubmitLoading(false);
-        await showSuccessMessage('學生已停用；歷史 attendance 已保留。', '學生已停用');
-      } catch (error) {
-        console.error(error);
-        setAdminStatus(`學生停用失敗：${error.message}`, 'danger');
-        setSubmitLoading(false);
-        await showErrorMessage(`學生停用失敗：${error.message}`, '學生停用失敗');
       } finally {
         setSubmitLoading(false);
       }
@@ -2287,8 +2098,10 @@ const DEFAULT_SEMESTERS = [
       renderList();
     });
     document.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && document.getElementById('classEditModal').classList.contains('show')) closeClassEditModal();
-      if (event.key === 'Escape' && document.getElementById('studentEditModal').classList.contains('show')) closeStudentEditModal();
+      if (event.key === 'Escape' && document.getElementById('classEditModal').classList.contains('show')) {
+        closeClassEditModal();
+        return;
+      }
       if (event.key === 'Escape' && document.getElementById('adminModal').classList.contains('show')) closeAdminModal();
     });
     document.addEventListener('visibilitychange', () => {

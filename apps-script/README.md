@@ -40,8 +40,7 @@
 - `GET ?action=attendance&semesterId=sem-114-down`：讀取點名紀錄。
 - `POST action=saveAttendance`：儲存點名紀錄。
 - `POST action=updateClass`：更新單筆課程的 `date`、`title`、`sortOrder`。
-- `POST action=updateStudent`：更新單筆學生的 `group`、`role`、`unit`、`name`、`studentNo`、`url`、`sortOrder`、`active`；停用學生也是把 `active` 改成 `FALSE`。
 
-`updateClass` 只更新 `classes` 工作表；`updateStudent` 只更新 `students` 工作表。兩者都用 `semesterId + id` 定位目前學期資料，不會修改其他學期，也不會修改 `attendance`。
+`updateClass` 只更新 `classes` 工作表，並用 `semesterId + classId` 定位目前學期課程，不會修改其他學期，也不會修改 `attendance`。學生資料維持透過 `importStudents` CSV 匯入更新。
 
 因為 GitHub Pages 和 Apps Script 是不同網域，前端讀取使用 JSONP，儲存使用 `fetch` 搭配 Apps Script Web App。

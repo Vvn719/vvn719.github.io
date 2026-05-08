@@ -9,10 +9,10 @@
 ## 目前版本狀態
 
 - GitHub Pages 版本以 `origin/main` 最新 commit 為準。
-- GitHub Pages 已確認可讀到拆分後版本；目前 `index.html` 載入 `app.js?v=9`。
+- GitHub Pages 已確認可讀到拆分後版本；目前 `index.html` 載入 `app.js?v=10`。
 - 前端已拆為 `index.html` + `app.js`；主要業務邏輯在 `app.js`。
 - 目前 `DEFAULT_API_URL` 指向 Apps Script `/exec` URL，且 `normalizeApiUrl()` 會拒絕非 `/exec` 的 Apps Script URL。
-- 已支援多學期、每學期 cache、自動同步、管理模式、課程單筆編輯、學生單筆編輯/停用、學生 CSV 匯入、課程 CSV 匯入、複製學期、Excel 匯出。
+- 已支援多學期、每學期 cache、自動同步、管理模式、課程單筆編輯、學生 CSV 匯入、課程 CSV 匯入、複製學期、Excel 匯出。
 - 正式使用前檢查文件：`docs/release-checklist.md`。
 - Google Sheet 備份流程文件：`docs/backup.md`。
 
@@ -23,8 +23,8 @@
 - `saveAttendance` 目前會以目前學期 payload 重寫同學期 attendance。送出前應先確認同步成功，避免用舊 cache 覆蓋較新的 Sheet 狀態。
 - 管理模式目前沒有登入或權限控管；知道網址的人若能操作頁面，就能看到管理入口。
 - CSV 匯入會替換目前學期的學生或課程 rows；匯入前務必先備份 Google Sheet。
-- 學生停用只會把目前學期 `students.active` 改為 `FALSE`，不刪除學生，也不修改既有 attendance；停用後前端點名名單不再顯示該學生。
-- 課程與學生單筆編輯都需要 Apps Script 重新部署後才會正式支援 `updateClass` / `updateStudent`。
+- 學生名單維持以 CSV 匯入管理；目前不提供逐筆編修或個別停用介面。若要停用學生，請在 CSV/Sheet 中調整 `active` 後匯入。
+- 課程單筆編輯需要 Apps Script 重新部署後才會正式支援 `updateClass`。
 - 複製學期不會複製 attendance，這是刻意設計，避免新學期帶入舊點名紀錄。
 - 前端 `localStorage` 可能保存舊 API URL 或舊學期 cache；測正式版時請用無痕模式或清除站台資料確認。
 - ExcelJS 由 CDN 載入；若現場網路無法連 CDN，Excel 匯出會不可用。
@@ -46,11 +46,11 @@
   - JSONP GET 讀取 Apps Script。
   - `fetch` POST 儲存 attendance。
   - `localStorage` 保存 API URL、學期選擇與每學期資料快取。
-  - 管理模式 Modal：查看目前學期資料、單筆編輯課程、單筆編輯/停用學生、新增/複製學期、預覽並匯入學生 CSV、預覽並匯入課程 CSV。
+  - 管理模式 Modal：查看目前學期資料、單筆編輯課程、新增/複製學期、預覽並匯入學生 CSV、預覽並匯入課程 CSV。
 - Backend：`apps-script/Code.gs`
   - 綁定 Google Sheet。
   - 自動建立 `semesters`、`classes`、`students`、`attendance` 四張工作表。
-  - 提供 GET actions、`saveAttendance`、`updateClass`、`updateStudent`、`createSemester`、`cloneSemester`、`importStudents`、`importClasses` POST。
+  - 提供 GET actions、`saveAttendance`、`updateClass`、`createSemester`、`cloneSemester`、`importStudents`、`importClasses` POST。
 - Hosting：GitHub Pages
   - repo 名稱是 `vvn719.github.io`。
   - 目前沒有 build、package、workflow，直接部署 root 的 `index.html`。
@@ -96,7 +96,6 @@ POST actions：
 
 - `saveAttendance`：儲存 attendance。
 - `updateClass`：更新目前學期單筆課程的 `date`、`title`、`sortOrder`，不修改 attendance。
-- `updateStudent`：更新目前學期單筆學生的 `group`、`role`、`unit`、`name`、`studentNo`、`url`、`sortOrder`、`active`，不修改其他學期或 attendance。
 - `createSemester`：新增學期，檢查 `semesterId` 不可重複、`name` 不可空白。
 - `cloneSemester`：複製來源學期到新學期，可複製 students/classes，不複製 attendance。
 - `importStudents`：匯入目前學期學生名單，替換 `students` 同學期 rows。

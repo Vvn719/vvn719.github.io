@@ -36,8 +36,8 @@ flowchart LR
 - 新增/複製會檢查 `semesterId` 不可重複、`name` 不可空白，並提示建議格式 `sem-115-up`。
 - 複製前會顯示來源學期預覽：學生幾人、課程幾堂，確認後才寫入。
 - CSV 匯入先在前端解析並預覽；若有必要欄位缺漏或 ID 重複，確認按鈕會停用。
-- 目前學期表格可單筆編輯課程，也可單筆編輯或停用學生；這些操作只更新對應 sheet，不修改 attendance。
-- 學生停用只會把 `active` 改成 `FALSE`。重新同步後點名名單不顯示該學生，但歷史 attendance 保留。
+- 目前學期課程表格可單筆編輯課程；學生名單只提供查看，學生資料維持用 CSV 匯入管理。
+- 學生停用仍透過 CSV/Sheet 的 `active` 欄位處理。重新同步後停用學生不會出現在點名名單，但歷史 attendance 保留。
 - 使用者確認後才 POST 到 Apps Script，寫入 Google Sheet，接著重新同步前端資料。
 - 程式內的 `DEFAULT_*` fallback data 不會因匯入而被移除。
 
@@ -143,9 +143,8 @@ JSONP callback 參數會經 `/^[\w.$]+$/` 驗證，通過時回傳 JavaScript，
 | `importStudents` | `{ semesterId, rows }` | 將 `rows` 正規化後寫入 `students` 工作表，只替換同一個 `semesterId` 的學生資料。 |
 | `importClasses` | `{ semesterId, rows }` | 將 `rows` 正規化後寫入 `classes` 工作表，只替換同一個 `semesterId` 的課程資料。 |
 | `updateClass` | `{ semesterId, classId, date, title, sortOrder }` | 更新同一個 `semesterId` 的單筆課程資料；只修改 `classes`，不修改 attendance。 |
-| `updateStudent` | `{ semesterId, studentId, group, role, unit, name, studentNo, url, sortOrder, active }` | 更新同一個 `semesterId` 的單筆學生資料；只修改 `students`，不修改其他學期或 attendance。 |
 
-管理 actions 使用 document lock。匯入與複製時會保留其他學期資料；單筆更新會用 `semesterId + classId` 或 `semesterId + studentId` 定位，找不到時回傳清楚錯誤。沒有 `semesterId` 的舊 rows 會被視為預設學期 `sem-114-down`。
+管理 actions 使用 document lock。匯入與複製時會保留其他學期資料；課程單筆更新會用 `semesterId + classId` 定位，找不到時回傳清楚錯誤。沒有 `semesterId` 的舊 rows 會被視為預設學期 `sem-114-down`。
 
 CSV 欄位：
 
