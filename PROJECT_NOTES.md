@@ -8,11 +8,11 @@
 
 ## 目前版本狀態
 
-- 目前遠端 `origin/main` 最新確認版本：`e7e22ee`。
-- GitHub Pages 已確認可讀到拆分後版本：`index.html` 載入 `app.js?v=7`。
+- GitHub Pages 版本以 `origin/main` 最新 commit 為準。
+- GitHub Pages 已確認可讀到拆分後版本；目前 `index.html` 載入 `app.js?v=8`。
 - 前端已拆為 `index.html` + `app.js`；主要業務邏輯在 `app.js`。
 - 目前 `DEFAULT_API_URL` 指向 Apps Script `/exec` URL，且 `normalizeApiUrl()` 會拒絕非 `/exec` 的 Apps Script URL。
-- 已支援多學期、每學期 cache、自動同步、管理模式、學生 CSV 匯入、課程 CSV 匯入、複製學期、Excel 匯出。
+- 已支援多學期、每學期 cache、自動同步、管理模式、課程單筆編輯、學生 CSV 匯入、課程 CSV 匯入、複製學期、Excel 匯出。
 - 正式使用前檢查文件：`docs/release-checklist.md`。
 - Google Sheet 備份流程文件：`docs/backup.md`。
 
@@ -48,7 +48,7 @@
 - Backend：`apps-script/Code.gs`
   - 綁定 Google Sheet。
   - 自動建立 `semesters`、`classes`、`students`、`attendance` 四張工作表。
-  - 提供 GET actions、`saveAttendance`、`createSemester`、`cloneSemester`、`importStudents`、`importClasses` POST。
+  - 提供 GET actions、`saveAttendance`、`updateClass`、`createSemester`、`cloneSemester`、`importStudents`、`importClasses` POST。
 - Hosting：GitHub Pages
   - repo 名稱是 `vvn719.github.io`。
   - 目前沒有 build、package、workflow，直接部署 root 的 `index.html`。
@@ -93,6 +93,7 @@ GET actions：
 POST actions：
 
 - `saveAttendance`：儲存 attendance。
+- `updateClass`：更新目前學期單筆課程的 `date`、`title`、`sortOrder`，不修改 attendance。
 - `createSemester`：新增學期，檢查 `semesterId` 不可重複、`name` 不可空白。
 - `cloneSemester`：複製來源學期到新學期，可複製 students/classes，不複製 attendance。
 - `importStudents`：匯入目前學期學生名單，替換 `students` 同學期 rows。
@@ -179,6 +180,7 @@ CSV 匯入流程：前端先解析 CSV 並顯示預覽，確認後才寫入 Goog
 - 每 30 秒目前學期自動同步，支援 hidden 暫停與 visibility resume。
 - 管理模式最小版 Modal。
 - 查看目前學期資料。
+- 課程單筆編輯，可修改 `date`、`title`、`sortOrder`，成功後重新同步目前學期。
 - 新增學期並自動切換。
 - 複製學期，可選擇複製學生與課程，不複製 attendance。
 - 學生 CSV 預覽、確認匯入與重新同步。

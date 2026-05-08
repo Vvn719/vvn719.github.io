@@ -140,6 +140,7 @@ JSONP callback 參數會經 `/^[\w.$]+$/` 驗證，通過時回傳 JavaScript，
 | `cloneSemester` | `{ sourceSemesterId, targetSemesterId, name, copyStudents, copyClasses }` | 建立新學期；依勾選複製來源學期的 students/classes，並把 `semesterId` 改成新學期；不複製 attendance。 |
 | `importStudents` | `{ semesterId, rows }` | 將 `rows` 正規化後寫入 `students` 工作表，只替換同一個 `semesterId` 的學生資料。 |
 | `importClasses` | `{ semesterId, rows }` | 將 `rows` 正規化後寫入 `classes` 工作表，只替換同一個 `semesterId` 的課程資料。 |
+| `updateClass` | `{ semesterId, classId, date, title, sortOrder }` | 更新同一個 `semesterId` 的單筆課程資料；只修改 `classes`，不修改 attendance。 |
 
 管理 actions 使用 document lock。匯入與複製時會保留其他學期資料；沒有 `semesterId` 的舊 rows 會被視為預設學期 `sem-114-down`。
 

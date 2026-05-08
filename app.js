@@ -785,6 +785,7 @@ const DEFAULT_SEMESTERS = [
     }
 
     function closeAdminModal() {
+      closeClassEditModal();
       document.getElementById('adminModal').classList.remove('show');
       document.getElementById('adminModal').setAttribute('aria-hidden', 'true');
       document.body.classList.remove('admin-modal-open');
@@ -821,9 +822,14 @@ const DEFAULT_SEMESTERS = [
         <div class="table-responsive admin-preview-table border rounded">
           <table class="table table-sm table-hover align-middle mb-0">
             <thead><tr>${columns.map(column => `<th>${escapeHtml(column.label)}</th>`).join('')}</tr></thead>
-            <tbody>${rows.map(row => `<tr>${columns.map(column => `<td>${escapeHtml(row[column.key])}</td>`).join('')}</tr>`).join('')}</tbody>
+            <tbody>${rows.map(row => `<tr>${columns.map(column => `<td>${column.render ? column.render(row) : escapeHtml(row[column.key])}</td>`).join('')}</tr>`).join('')}</tbody>
           </table>
         </div>`;
+    }
+
+    function renderClassEditButton(row) {
+      const encodedId = escapeHtml(JSON.stringify(row.id));
+      return `<button class="btn btn-sm btn-outline-primary" type="button" onclick='openClassEditModal(${encodedId})'>編輯</button>`;
     }
 
     function renderAdminOverview() {
@@ -865,7 +871,8 @@ const DEFAULT_SEMESTERS = [
           { key: 'id', label: 'id' },
           { key: 'date', label: '日期' },
           { key: 'title', label: '課程' },
-          { key: 'sortOrder', label: '排序' }
+          { key: 'sortOrder', label: '排序' },
+          { key: 'actions', label: '操作', render: renderClassEditButton }
         ], '目前學期沒有課程')}
 
         <h6 class="fw-bold mt-4">組別統計</h6>
@@ -886,6 +893,92 @@ const DEFAULT_SEMESTERS = [
           { key: 'id', label: 'id / 學號' }
         ], '目前學期沒有學生')}
       `;
+    }
+
+    function classById(classId) {
+      return currentClasses.find(item => item.id === classId);
+    }
+
+    function openClassEditModal(classId) {
+      const classItem = classById(classId);
+      if (!classItem) {
+        setAdminStatus(`找不到課程：${classId}`, 'danger');
+        return;
+      }
+
+      document.getElementById('classEditIdInput').value = classItem.id;
+      document.getElementById('classEditDateInput').value = classItem.date || '';
+      document.getElementById('classEditTitleInput').value = classItem.title || '';
+      document.getElementById('classEditSortOrderInput').value = classItem.sortOrder || '';
+      document.getElementById('classEditMeta').textContent = `${currentSemesterLabel()} / ${classItem.id}`;
+      document.getElementById('classEditSaveButton').disabled = false;
+      document.getElementById('classEditSaveButton').textContent = '儲存';
+      document.getElementById('classEditModal').classList.add('show');
+      document.getElementById('classEditModal').setAttribute('aria-hidden', 'false');
+      document.getElementById('classEditDateInput').focus();
+    }
+
+    function closeClassEditModal() {
+      document.getElementById('classEditModal').classList.remove('show');
+      document.getElementById('classEditModal').setAttribute('aria-hidden', 'true');
+    }
+
+    function handleClassEditBackdrop(event) {
+      if (event.target.id === 'classEditModal') closeClassEditModal();
+    }
+
+    async function saveClassEdit() {
+      const classId = document.getElementById('classEditIdInput').value;
+      const date = document.getElementById('classEditDateInput').value.trim();
+      const title = document.getElementById('classEditTitleInput').value.trim();
+      const sortOrderValue = document.getElementById('classEditSortOrderInput').value;
+      const sortOrder = Number(sortOrderValue);
+
+      if (!date) {
+        setAdminStatus('課程日期不可空白', 'danger');
+        document.getElementById('classEditDateInput').focus();
+        return;
+      }
+      if (!title) {
+        setAdminStatus('課程名稱不可空白', 'danger');
+        document.getElementById('classEditTitleInput').focus();
+        return;
+      }
+      if (!Number.isFinite(sortOrder) || sortOrder <= 0) {
+        setAdminStatus('sortOrder 必須是大於 0 的數字', 'danger');
+        document.getElementById('classEditSortOrderInput').focus();
+        return;
+      }
+      if (!apiUrl) {
+        await showMessage('請先設定 Apps Script API URL', '尚未設定 API');
+        configureApi();
+        return;
+      }
+
+      const button = document.getElementById('classEditSaveButton');
+      button.disabled = true;
+      button.textContent = '儲存中...';
+      setAdminStatus('課程更新中', 'warning');
+
+      try {
+        const result = await postApi('updateClass', {
+          semesterId: currentSemesterId,
+          classId,
+          date,
+          title,
+          sortOrder
+        });
+        if (result && result.ok === false) throw new Error(result.error || '課程更新失敗');
+        closeClassEditModal();
+        await reloadFromApi({ semesterId: currentSemesterId, keepSemester: true, throwOnError: true, force: true });
+        renderAdminOverview();
+        setAdminStatus('課程已更新並重新同步', 'success');
+      } catch (error) {
+        console.error(error);
+        button.disabled = false;
+        button.textContent = '儲存';
+        setAdminStatus(`課程更新失敗：${error.message}`, 'danger');
+      }
     }
 
     function semesterExists(semesterId) {
@@ -1980,6 +2073,7 @@ const DEFAULT_SEMESTERS = [
       renderList();
     });
     document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && document.getElementById('classEditModal').classList.contains('show')) closeClassEditModal();
       if (event.key === 'Escape' && document.getElementById('adminModal').classList.contains('show')) closeAdminModal();
     });
     document.addEventListener('visibilitychange', () => {

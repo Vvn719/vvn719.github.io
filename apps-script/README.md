@@ -39,5 +39,6 @@
 - `GET ?action=bootstrap`：讀取學期、課程、學生。
 - `GET ?action=attendance&semesterId=sem-114-down`：讀取點名紀錄。
 - `POST action=saveAttendance`：儲存點名紀錄。
+- `POST action=updateClass`：更新單筆課程的 `date`、`title`、`sortOrder`。
 
 因為 GitHub Pages 和 Apps Script 是不同網域，前端讀取使用 JSONP，儲存使用 `fetch` 搭配 Apps Script Web App。

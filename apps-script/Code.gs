@@ -120,6 +120,7 @@ function doPost(e) {
     if (action === 'saveAttendance') return respond_(saveAttendance_(body.payload || {}));
     if (action === 'importStudents') return respond_(importStudents_(body.payload || {}));
     if (action === 'importClasses') return respond_(importClasses_(body.payload || {}));
+    if (action === 'updateClass') return respond_(updateClass_(body.payload || {}));
     if (action === 'createSemester') return respond_(createSemester_(body.payload || {}));
     if (action === 'cloneSemester') return respond_(cloneSemester_(body.payload || {}));
     return respond_({ ok: false, error: 'Unknown action' });
@@ -175,6 +176,39 @@ function importClasses_(payload) {
   const semesterId = payload.semesterId || DEFAULT_SEMESTER_ID;
   const rows = normalizeImportedClasses_(payload.rows || [], semesterId);
   return replaceSemesterRows_(SHEETS.classes, HEADERS.classes, semesterId, rows);
+}
+
+function updateClass_(payload) {
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+
+  try {
+    const semesterId = payload.semesterId || DEFAULT_SEMESTER_ID;
+    const classId = String(payload.classId || payload.id || '').trim();
+    if (!classId) throw new Error('classId is required');
+
+    const classes = readSheetObjects_(SHEETS.classes);
+    const index = classes.findIndex(row => semesterIdForRecord_(row) === semesterId && row.id === classId);
+    if (index < 0) throw new Error(`Class not found: ${classId}`);
+
+    const updatedClass = {
+      ...classes[index],
+      id: classId,
+      semesterId,
+      date: String(payload.date || '').trim(),
+      title: String(payload.title || '').trim(),
+      sortOrder: normalizeSortOrder_(payload.sortOrder, classes[index].sortOrder || index + 1)
+    };
+    if (!updatedClass.date) throw new Error('date is required');
+    if (!updatedClass.title) throw new Error('title is required');
+
+    classes[index] = updatedClass;
+    writeSheetRows_(SHEETS.classes, HEADERS.classes, classes);
+    SpreadsheetApp.flush();
+    return { ok: true, class: updatedClass };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function createSemester_(payload) {

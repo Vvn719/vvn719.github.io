@@ -168,6 +168,11 @@
       overflow: hidden;
     }
 
+    .app-modal-backdrop .modal-dialog {
+      width: min(520px, 100%);
+      margin: 0;
+    }
+
     .app-modal-message {
       white-space: pre-line;
     }
@@ -415,6 +420,39 @@
   </div>
 
 
+  <div class="app-modal-backdrop" id="classEditModal" aria-hidden="true" onclick="handleClassEditBackdrop(event)">
+    <div class="modal-dialog modal-dialog-centered" role="dialog" aria-modal="true" aria-labelledby="classEditTitle">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div>
+            <h5 class="modal-title fw-bold" id="classEditTitle">編輯課程</h5>
+            <div class="small text-muted" id="classEditMeta"></div>
+          </div>
+          <button class="btn-close" type="button" aria-label="關閉" onclick="closeClassEditModal()"></button>
+        </div>
+        <div class="modal-body">
+          <input id="classEditIdInput" type="hidden">
+          <div class="mb-3">
+            <label class="form-label fw-bold" for="classEditDateInput">date</label>
+            <input class="form-control" id="classEditDateInput" autocomplete="off">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold" for="classEditTitleInput">title</label>
+            <input class="form-control" id="classEditTitleInput" autocomplete="off">
+          </div>
+          <div class="mb-0">
+            <label class="form-label fw-bold" for="classEditSortOrderInput">sortOrder</label>
+            <input class="form-control" id="classEditSortOrderInput" type="number" min="1" step="1">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" type="button" onclick="closeClassEditModal()">取消</button>
+          <button class="btn btn-primary" id="classEditSaveButton" type="button" onclick="saveClassEdit()">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="app-modal-backdrop" id="appModal" aria-hidden="true">
     <div class="app-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="appModalTitle">
       <div class="border-bottom px-3 py-2 d-flex justify-content-between align-items-center">
@@ -440,7 +478,7 @@
   </div>
 
 
-  <script src="./app.js?v=7" defer></script>
+  <script src="./app.js?v=8" defer></script>
 </body>
 
 </html>
