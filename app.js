@@ -643,9 +643,11 @@ async function persistAttendanceToApi() {
     setSyncState('unset')
     return { ok: false, skipped: true }
   }
+  const classItem = currentClass()
   setSyncState('saving')
   const result = await postApi('saveAttendance', {
     semesterId: currentSemesterId,
+    classId: classItem?.id || '',
     records: attendancePayloadFromRecords()
   })
   if (result && result.ok === false) throw new Error(result.error || 'API save failed')
@@ -2210,6 +2212,7 @@ async function submitAttendance() {
   setSubmitLoading(true, '同步中，請稍候...')
 
   let saveFailed = false
+  let formSubmissionFailed = false
   let cacheSource = 'api'
   let message = pendingStudents.length ? `已送出 ${pendingStudents.length} 人報到。` : '目前沒有新增報到人員。'
 
@@ -2243,6 +2246,7 @@ async function submitAttendance() {
       const result = await persistAttendanceToApi()
       if (result?.skipped) cacheSource = 'local'
       if (result && result.ok === false) throw new Error(result.error || 'API save failed')
+      if (result?.formSubmissions?.failed > 0) formSubmissionFailed = true
     } catch (error) {
       console.warn(error)
       saveFailed = true
@@ -2260,10 +2264,17 @@ async function submitAttendance() {
     setSubmitLoading(false)
   }
 
-  await showMessage(
-    saveFailed ? `${message}\n本機已更新，但 Google Sheet 儲存失敗，請再按一次送出或同步後確認。` : message,
-    saveFailed ? '送出完成但雲端儲存失敗' : '送出完成'
-  )
+  const finalMessage = saveFailed
+    ? `${message}\n本機已更新，但 Google Sheet 儲存失敗，請再按一次送出或同步後確認。`
+    : formSubmissionFailed
+      ? '點名已保存，但部分 Google Form 送出失敗'
+      : message
+  const finalTitle = saveFailed
+    ? '送出完成但雲端儲存失敗'
+    : formSubmissionFailed
+      ? '表單部分失敗'
+      : '送出完成'
+  await showMessage(finalMessage, finalTitle)
 }
 
 function runSelfTests() {

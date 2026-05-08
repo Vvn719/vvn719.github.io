@@ -21,6 +21,8 @@
 - 正式點名前請先複製 Google Sheet，或至少建立 `attendance` backup 工作表。
 - 修改 Apps Script 後，必須重新部署 Web App；只儲存程式碼不會更新正式 `/exec`。
 - `saveAttendance` 目前會以目前學期 payload 重寫同學期 attendance。送出前應先確認同步成功，避免用舊 cache 覆蓋較新的 Sheet 狀態。
+- `saveAttendance` 寫入 attendance 後會針對目前課程代送 Google Form；表單失敗不會 rollback attendance，請查看 `formSubmissions`。
+- 修改 `apps-script/Code.gs` 後，請在 Apps Script 重新部署既有 Web App 的新版本，不要新增新的 deployment。
 - 管理模式目前沒有登入或權限控管；知道網址的人若能操作頁面，就能看到管理入口。
 - CSV 匯入會替換目前學期的學生或課程 rows；匯入前務必先備份 Google Sheet。
 - 學生名單維持以 CSV 匯入管理；目前不提供逐筆編修或個別停用介面。若要停用學生，請在 CSV/Sheet 中調整 `active` 後匯入。
@@ -49,7 +51,7 @@
   - 管理模式 Modal：查看目前學期資料、單筆編輯課程、新增/複製學期、預覽並匯入學生 CSV、預覽並匯入課程 CSV。
 - Backend：`apps-script/Code.gs`
   - 綁定 Google Sheet。
-  - 自動建立 `semesters`、`classes`、`students`、`attendance` 四張工作表。
+  - 自動建立 `semesters`、`classes`、`students`、`attendance`、`formSubmissions` 五張工作表。
   - 提供 GET actions、`saveAttendance`、`updateClass`、`createSemester`、`cloneSemester`、`importStudents`、`importClasses` POST。
 - Hosting：GitHub Pages
   - repo 名稱是 `vvn719.github.io`。
@@ -73,13 +75,19 @@
 
 `id`, `group`, `role`, `unit`, `name`, `studentNo`, `formId`, `qrUrl`, `url`, `active`, `sortOrder`, `semesterId`
 
-用途：定義人員、分組、角色與排序。`id` 是系統內部 studentId；`formId` 是未來 Google Form 代送用的表單欄位值，兩者不可混用。`qrUrl` 可保存 QR/prefilled URL。`active` 若為 `false`、`0`、`no`、`否`、`停用`，前端不顯示。
+用途：定義人員、分組、角色與排序。`id` 是系統內部 studentId；`formId` 是送到 Google Form `ID` 欄位的值，兩者不可混用。`qrUrl` 可保存 QR/prefilled URL。`active` 若為 `false`、`0`、`no`、`否`、`停用`，前端不顯示。
 
 ### `attendance`
 
 `semesterId`, `classId`, `studentId`, `status`, `note`, `updatedAt`
 
 用途：保存出缺席。`status` 支援 `present`、`online`、`late`、`absent`、`excluded`。
+
+### `formSubmissions`
+
+`semesterId`, `classId`, `studentId`, `formId`, `submittedAt`, `result`, `message`
+
+用途：記錄 Apps Script 代送 Google Form 的成功或失敗結果，並用成功紀錄避免重複送出。
 
 ## Apps Script API
 
@@ -101,7 +109,7 @@ POST actions：
 - `importStudents`：匯入目前學期學生名單，替換 `students` 同學期 rows。
 - `importClasses`：匯入目前學期課程，替換 `classes` 同學期 rows。
 
-注意：目前 `saveAttendance` 是整個學期替換寫入。它保留其他學期 records，但會清空目前學期的 attendance 後重寫前端 payload，因此送出前最好先同步完整資料。
+注意：目前 `saveAttendance` 是整個學期替換寫入。它保留其他學期 records，但會清空目前學期的 attendance 後重寫前端 payload，因此送出前最好先同步完整資料。Attendance 保存後會依 payload 的 `classId` 只針對目前課程代送 Google Form，失敗會記錄到 `formSubmissions`，但不會回滾 attendance。
 
 CSV 匯入流程：前端先解析 CSV 並顯示預覽，確認後才寫入 Google Sheet，寫入完成會重新同步前端資料。匯入不會移除程式內建 fallback data。學生 CSV 欄位為 `id`, `group`, `role`, `unit`, `name`, `studentNo`, `formId`, `qrUrl`, `url`, `active`, `sortOrder`, `semesterId`；`qrUrl` 也接受 `qrLink` 或 `prefilledUrl` 欄名。課程 CSV 欄位為 `id`, `semesterId`, `date`, `title`, `sortOrder`。
 
@@ -151,7 +159,9 @@ CSV 匯入流程：前端先解析 CSV 並顯示預覽，確認後才寫入 Goog
 3. 寫入 `attendanceRecords`。
 4. `attendancePayloadFromRecords()` 產生整學期 payload。
 5. `persistAttendanceToApi()` 呼叫 `saveAttendance`。
-6. 成功顯示 `已同步`；失敗顯示 `儲存失敗` 並保留本機快取。
+6. Apps Script 保存 attendance 後針對目前課程代送 Google Form，`excluded` 不送。
+7. 同一 `semesterId + classId + studentId` 已成功送過表單時會略過。
+8. 成功顯示 `已同步`；Google Form 部分失敗時顯示「點名已保存，但部分 Google Form 送出失敗」；儲存失敗時顯示 `儲存失敗` 並保留本機快取。
 
 出席統計規則：
 
@@ -189,6 +199,7 @@ CSV 匯入流程：前端先解析 CSV 並顯示預覽，確認後才寫入 Goog
 - 課程 CSV 預覽、確認匯入與重新同步。
 - Google Sheet schema 與 Apps Script setup。
 - JSONP 讀取與 POST 儲存。
+- Google Form 自動代送與 `formSubmissions` 紀錄。
 - `localStorage` cache。
 - 出席、線上、遲到、缺席理由、不列入出席。
 - 各組與全班 summary。

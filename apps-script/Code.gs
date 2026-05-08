@@ -4,14 +4,16 @@ const SHEETS = {
   semesters: 'semesters',
   classes: 'classes',
   students: 'students',
-  attendance: 'attendance'
+  attendance: 'attendance',
+  formSubmissions: 'formSubmissions'
 };
 
 const HEADERS = {
   semesters: ['id', 'name', 'year', 'term', 'status'],
   classes: ['id', 'semesterId', 'date', 'title', 'sortOrder'],
   students: ['id', 'group', 'role', 'unit', 'name', 'studentNo', 'formId', 'qrUrl', 'url', 'active', 'sortOrder', 'semesterId'],
-  attendance: ['semesterId', 'classId', 'studentId', 'status', 'note', 'updatedAt']
+  attendance: ['semesterId', 'classId', 'studentId', 'status', 'note', 'updatedAt'],
+  formSubmissions: ['semesterId', 'classId', 'studentId', 'formId', 'submittedAt', 'result', 'message']
 };
 
 const DEFAULT_SEMESTERS = [
@@ -132,21 +134,20 @@ function doPost(e) {
 function saveAttendance_(payload) {
   const lock = LockService.getDocumentLock();
   lock.waitLock(30000);
+  const semesterId = payload.semesterId || DEFAULT_SEMESTER_ID;
+  const updatedAt = new Date().toISOString();
+  const incoming = (payload.records || [])
+    .filter(record => record.semesterId && record.classId && record.studentId && record.status)
+    .map(record => ({
+      semesterId,
+      classId: record.classId,
+      studentId: record.studentId,
+      status: record.status,
+      note: record.note || '',
+      updatedAt
+    }));
 
   try {
-    const semesterId = payload.semesterId || DEFAULT_SEMESTER_ID;
-    const updatedAt = new Date().toISOString();
-    const incoming = (payload.records || [])
-      .filter(record => record.semesterId && record.classId && record.studentId && record.status)
-      .map(record => ({
-        semesterId,
-        classId: record.classId,
-        studentId: record.studentId,
-        status: record.status,
-        note: record.note || '',
-        updatedAt
-      }));
-
     const existingOtherSemesters = readSheetObjects_(SHEETS.attendance)
       .filter(record => record.semesterId !== semesterId);
     const allRecords = existingOtherSemesters.concat(incoming);
@@ -160,10 +161,217 @@ function saveAttendance_(payload) {
     }
 
     SpreadsheetApp.flush();
-    return { ok: true, count: incoming.length, updatedAt };
   } finally {
     lock.releaseLock();
   }
+
+  const targetClassId = payload.classId || '';
+  const formRecords = targetClassId
+    ? incoming.filter(record => record.classId === targetClassId)
+    : incoming;
+  const formSubmissions = submitGoogleForms_(formRecords, semesterId);
+  return { ok: true, count: incoming.length, updatedAt, formSubmissions };
+}
+
+function submitGoogleForms_(records, semesterId) {
+  const summary = { attempted: 0, success: 0, failed: 0, skipped: 0, messages: [] };
+  const lock = LockService.getDocumentLock();
+  let locked = false;
+
+  try {
+    lock.waitLock(30000);
+    locked = true;
+    const students = filterBySemester_(readSheetObjects_(SHEETS.students), semesterId);
+    const studentById = {};
+    students.forEach(student => {
+      studentById[student.id] = student;
+      if (student.apiId) studentById[student.apiId] = student;
+    });
+
+    const existingSubmissions = readSheetObjects_(SHEETS.formSubmissions);
+    const successfulKeys = new Set(
+      existingSubmissions
+        .filter(item => item.result === 'success')
+        .map(item => formSubmissionKey_(item.semesterId, item.classId, item.studentId))
+    );
+    const submittedAt = new Date().toISOString();
+    const logs = [];
+
+    records.forEach(record => {
+      if (record.status === 'excluded') {
+        summary.skipped += 1;
+        return;
+      }
+
+      const key = formSubmissionKey_(record.semesterId, record.classId, record.studentId);
+      if (successfulKeys.has(key)) {
+        summary.skipped += 1;
+        return;
+      }
+
+      const student = studentById[record.studentId];
+      summary.attempted += 1;
+
+      try {
+        if (!student) throw new Error(`Student not found: ${record.studentId}`);
+        const result = submitGoogleForm_(record, student);
+        logs.push({
+          semesterId: record.semesterId,
+          classId: record.classId,
+          studentId: record.studentId,
+          formId: student.formId || '',
+          submittedAt,
+          result: 'success',
+          message: result.message || 'submitted'
+        });
+        successfulKeys.add(key);
+        summary.success += 1;
+      } catch (error) {
+        const message = String(error && error.message ? error.message : error);
+        logs.push({
+          semesterId: record.semesterId,
+          classId: record.classId,
+          studentId: record.studentId,
+          formId: student ? student.formId || '' : '',
+          submittedAt,
+          result: 'failed',
+          message
+        });
+        summary.failed += 1;
+        summary.messages.push(`${record.studentId}: ${message}`);
+      }
+    });
+
+    if (logs.length) {
+      writeSheetRows_(
+        SHEETS.formSubmissions,
+        HEADERS.formSubmissions,
+        existingSubmissions.concat(logs)
+      );
+      SpreadsheetApp.flush();
+    }
+  } catch (error) {
+    summary.failed += 1;
+    summary.messages.push(String(error && error.message ? error.message : error));
+  } finally {
+    if (locked) lock.releaseLock();
+  }
+
+  return summary;
+}
+
+function formSubmissionKey_(semesterId, classId, studentId) {
+  return `${semesterId}::${classId}::${studentId}`;
+}
+
+function submitGoogleForm_(record, student) {
+  const qrUrl = student.qrUrl || student.prefilledUrl || student.qrLink || '';
+  if (!qrUrl) throw new Error('Missing qrUrl');
+
+  const status = googleFormStatusFor_(record.status);
+  if (!status) return { skipped: true, message: 'excluded' };
+
+  const note = googleFormCourseNoteFor_(record);
+  return submitPrefilledFormUrl_(qrUrl, {
+    idValue: student.formId || student.studentNo || student.id || record.studentId,
+    nameValue: student.name || '',
+    checkValue: status,
+    courseNote: note
+  });
+}
+
+function googleFormStatusFor_(status) {
+  return {
+    present: '出席',
+    online: '出席',
+    late: '遲到',
+    absent: '缺席'
+  }[status] || '';
+}
+
+function googleFormCourseNoteFor_(record) {
+  if (record.note) return record.note;
+  if (record.status === 'online') return '線上（須整堂課上完）';
+  if (record.status === 'late') return '遲到';
+  if (record.status === 'absent') return '請假理由';
+  return '';
+}
+
+function submitPrefilledFormUrl_(qrUrl, values) {
+  const parsed = parsePrefilledFormUrl_(qrUrl, values);
+  const response = UrlFetchApp.fetch(parsed.submitUrl, {
+    method: 'post',
+    payload: parsed.payload,
+    followRedirects: false,
+    muteHttpExceptions: true
+  });
+  const code = response.getResponseCode();
+  if (code >= 400) throw new Error(`Google Form HTTP ${code}`);
+  return { ok: true, message: `HTTP ${code}` };
+}
+
+function parsePrefilledFormUrl_(qrUrl, values) {
+  const rawUrl = String(qrUrl || '');
+  const parts = rawUrl.split('?');
+  const baseUrl = parts[0];
+  const params = parseQueryParams_(parts.slice(1).join('?'));
+  const entryKeys = [];
+  params.forEach(item => {
+    const key = item.key;
+    if (/^entry\.\d+/.test(key) && !entryKeys.includes(key)) entryKeys.push(key);
+  });
+
+  if (entryKeys.length < 4) throw new Error('qrUrl missing Google Form entry fields');
+
+  const idKey = findEntryKeyByValue_(params, entryKeys, values.idValue) || entryKeys[0];
+  const nameKey = findEntryKeyByValue_(params, entryKeys, values.nameValue, [idKey]) || firstUnusedEntryKey_(entryKeys, [idKey]) || entryKeys[1];
+  const checkKey = firstUnusedEntryKey_(entryKeys, [idKey, nameKey]) || entryKeys[2];
+  const noteKey = firstUnusedEntryKey_(entryKeys, [idKey, nameKey, checkKey]) || entryKeys[3];
+
+  const submitUrl = baseUrl.replace(/\/viewform$/, '/formResponse');
+  const payload = {};
+  payload[idKey] = values.idValue;
+  payload[nameKey] = values.nameValue;
+  payload[checkKey] = values.checkValue;
+  payload[noteKey] = values.courseNote || '';
+
+  return { submitUrl, payload };
+}
+
+function parseQueryParams_(query) {
+  if (!query) return [];
+  return query.split('&')
+    .filter(Boolean)
+    .map(part => {
+      const pieces = part.split('=');
+      const key = decodeFormValue_(pieces.shift() || '');
+      const value = decodeFormValue_(pieces.join('='));
+      return { key, value };
+    });
+}
+
+function decodeFormValue_(value) {
+  try {
+    return decodeURIComponent(String(value || '').replace(/\+/g, ' '));
+  } catch (error) {
+    return String(value || '');
+  }
+}
+
+function findEntryKeyByValue_(params, entryKeys, value, usedKeys) {
+  const used = new Set(usedKeys || []);
+  const expected = String(value || '').trim();
+  if (!expected) return '';
+  return entryKeys.find(key => {
+    if (used.has(key)) return false;
+    const match = params.find(item => item.key === key);
+    return String(match ? match.value : '').trim() === expected;
+  }) || '';
+}
+
+function firstUnusedEntryKey_(entryKeys, usedKeys) {
+  const used = new Set(usedKeys || []);
+  return entryKeys.find(key => !used.has(key)) || '';
 }
 
 function importStudents_(payload) {

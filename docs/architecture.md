@@ -43,7 +43,7 @@ flowchart LR
 
 ## Google Sheet Schema
 
-Apps Script 會確保同一份 Google Sheet 裡存在四張工作表，第一列為固定欄位標題。
+Apps Script 會確保同一份 Google Sheet 裡存在五張工作表，第一列為固定欄位標題。
 
 ### `semesters`
 
@@ -75,7 +75,7 @@ Apps Script 會確保同一份 Google Sheet 裡存在四張工作表，第一列
 | `unit` | 地方單位。 |
 | `name` | 姓名。 |
 | `studentNo` | 學號，匯出 Excel 時寫入學號欄。 |
-| `formId` | 未來 Google Form 代送用的表單 ID 欄位值；不可和系統內部 `id` 混用。 |
+| `formId` | Google Form `ID` 欄位要送出的值；不可和系統內部 `id` 混用。 |
 | `qrUrl` | QR code 或 Google Form prefilled URL；前端 CSV 也接受 `qrLink`、`prefilledUrl`。 |
 | `url` | 送出報到後可自動開啟的個人連結；`#` 表示沒有連結。 |
 | `active` | 是否啟用。`false`、`0`、`no`、`否`、`停用` 會被視為停用。 |
@@ -92,6 +92,18 @@ Apps Script 會確保同一份 Google Sheet 裡存在四張工作表，第一列
 | `status` | `present`、`online`、`late`、`absent`、`excluded`。 |
 | `note` | 備註；缺席會存 `請假：...`，排除會存 `不列入出席`。 |
 | `updatedAt` | Apps Script 寫入時產生的 ISO timestamp。 |
+
+### `formSubmissions`
+
+| 欄位 | 用途 |
+| --- | --- |
+| `semesterId` | 所屬學期。 |
+| `classId` | 課程 ID。 |
+| `studentId` | 學員 ID。 |
+| `formId` | 送到 Google Form `ID` 欄位的值。 |
+| `submittedAt` | Apps Script 嘗試送表單時的 ISO timestamp。 |
+| `result` | `success` 或 `failed`。 |
+| `message` | HTTP response、錯誤訊息或略過原因。 |
 
 ## Apps Script API
 
@@ -121,6 +133,7 @@ JSONP callback 參數會經 `/^[\w.$]+$/` 驗證，通過時回傳 JavaScript，
   "action": "saveAttendance",
   "payload": {
     "semesterId": "sem-114-down",
+    "classId": "class-1",
     "records": [
       {
         "semesterId": "sem-114-down",
@@ -134,7 +147,17 @@ JSONP callback 參數會經 `/^[\w.$]+$/` 驗證，通過時回傳 JavaScript，
 }
 ```
 
-`saveAttendance_` 會使用 `LockService.getDocumentLock()` 防止同時寫入。寫入策略是「整個學期替換」：保留其他學期的 attendance，清空目前學期既有 records，再寫入前端送來的全部 records。這代表前端送出前應先同步完整學期資料，避免以不完整本機資料覆蓋該學期。
+`saveAttendance_` 會使用 `LockService.getDocumentLock()` 防止同時寫入。寫入策略是「整個學期替換」：保留其他學期的 attendance，清空目前學期既有 records，再寫入前端送來的全部 records。這代表前端送出前應先同步完整學期資料，避免以不完整本機資料覆蓋該學期。Attendance 寫入完成後，Apps Script 會依 payload 的 `classId` 只針對目前課程代送 Google Form；表單失敗不會 rollback attendance。
+
+Google Form 代送：
+
+- 使用 students sheet 的 `qrUrl` prefilled URL 送出，並把 `/viewform` 改送到 `/formResponse`。
+- `formId` 會送到 Google Form 的 `ID` 欄位；`name` 會送到 `NAME` 欄位。
+- 狀態 mapping：`present`、`online` -> `出席`，`late` -> `遲到`，`absent` -> `缺席`，`excluded` 不送表單。
+- `班程註記` 以 attendance `note` 優先；沒有 note 時，`online` 使用 `線上（須整堂課上完）`，`late` 使用 `遲到`，`absent` 使用 `請假理由`。
+- `formSubmissions` 會記錄每次嘗試送表單的結果。
+- 同一組 `semesterId + classId + studentId` 若已經有 `success` 紀錄，後續會略過避免重複送出。
+- 若部分表單失敗，前端會顯示「點名已保存，但部分 Google Form 送出失敗」。
 
 管理模式新增 POST actions：
 
@@ -252,7 +275,9 @@ CSV 欄位：
 4. 目前課程 record 寫回 `attendanceRecords`。
 5. `attendancePayloadFromRecords()` 將整個記憶體中的學期 attendance 轉成 API payload。
 6. `persistAttendanceToApi()` POST `saveAttendance`。
-7. 成功時 badge 顯示 `已同步`；失敗時顯示 `儲存失敗`，但本機快取仍會更新。
+7. Apps Script 先保存 attendance，再針對目前課程代送 Google Form；`excluded` 不送。
+8. 同一 `semesterId + classId + studentId` 已成功送過表單時會略過。
+9. 成功時 badge 顯示 `已同步`；Google Form 部分失敗會提示「點名已保存，但部分 Google Form 送出失敗」；儲存失敗時顯示 `儲存失敗`，但本機快取仍會更新。
 
 ### 匯出
 
@@ -285,6 +310,7 @@ CSV 欄位：
 - Google Sheet 四表資料模型。
 - Apps Script setup、自動建表與預設資料 seed。
 - JSONP 讀取 API 與 POST 儲存 API。
+- Google Form 自動代送與 `formSubmissions` 結果紀錄。
 - 每學期 localStorage cache。
 - 搜尋姓名、組別、單位、角色。
 - 各組快速導航、全選可見人員、清除勾選。
@@ -306,5 +332,5 @@ CSV 欄位：
 - 增加前端測試與 Apps Script 測試資料，讓 schema 與同步流程可回歸驗證。
 - 將 Excel 標題、檔名與 worksheet 名稱改為依目前學期動態產生。
 - 增加 Sheet 資料驗證或管理文件，避免手動編輯欄位時破壞 schema。
-- 清楚定義 `url`、`formId`、`qrUrl` 欄位的用途與未來 Google Form 代送流程。
+- 補 Google Form 送出失敗的管理檢視、重試流程與錯誤分類。
 - 擴充 GitHub Pages 文件，加入第一次部署、API URL 設定與常見故障排除。
