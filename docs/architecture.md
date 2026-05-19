@@ -163,11 +163,12 @@ Google Form 代送：
 
 - 使用 students sheet 的 `qrUrl` prefilled URL 送出，並把 `/viewform` 改送到 `/formResponse`。
 - `formId` 會送到 Google Form 的 `ID` 欄位；`name` 會送到 `NAME` 欄位。
-- 狀態 mapping：`present`、`online` -> `出席`，`late` -> `遲到`，`absent` -> `缺席`，`excluded` 不送表單。
-- `班程註記` 以 attendance `note` 優先；沒有 note 時，`online` 使用 `線上（須整堂課上完）`，`late` 使用 `遲到`，`absent` 使用 `請假理由`。
+- 簽到表單只送 `ID`、`NAME`、`PASS`、`TYPE` 四欄；`PASS` 預設為 `303030`，若 prefilled URL 已帶入其他值則保留原值。
+- `TYPE` mapping：`present`、`late` -> `實體`，`online` -> `線上`；`absent`、`excluded` 不送 Google Form，只保存於 `attendance`。
 - `formSubmissions` 會記錄每次嘗試送表單的結果。
 - 同一組 `semesterId + classId + studentId` 若已經有 `success` 紀錄，後續會略過避免重複送出。
 - 若部分表單失敗，前端會顯示「點名已保存，但部分 Google Form 送出失敗」。
+- 因為代送使用 `UrlFetchApp.fetch()`，Apps Script manifest 需要 `https://www.googleapis.com/auth/script.external_request` scope。更新 Code.gs 後，先在 Apps Script 執行一次 `authorizeGoogleFormAccess()` 完成授權，再重新部署既有 Web App。
 
 管理模式新增 POST actions：
 

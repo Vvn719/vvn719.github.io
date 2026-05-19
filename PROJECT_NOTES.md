@@ -165,9 +165,13 @@ CSV 匯入流程：前端先解析 CSV 並顯示預覽，確認後才寫入 Goog
 3. 寫入 `attendanceRecords`。
 4. `attendancePayloadFromRecords()` 產生整學期 payload。
 5. `persistAttendanceToApi()` 呼叫 `saveAttendance`。
-6. Apps Script 保存 attendance 後針對目前課程代送 Google Form，`excluded` 不送。
+6. Apps Script 保存 attendance 後針對目前課程代送 Google Form；只送 `present`、`online`、`late`，`absent` 與 `excluded` 不送。
 7. 同一 `semesterId + classId + studentId` 已成功送過表單時會略過。
 8. 成功顯示 `已同步`；Google Form 部分失敗時顯示「點名已保存，但部分 Google Form 送出失敗」；儲存失敗時顯示 `儲存失敗` 並保留本機快取。
+
+Google Form 代送目前只處理簽到表單四欄：`ID`、`NAME`、`PASS`、`TYPE`。`PASS` 預設 `303030`，若 QR/prefilled URL 原本已有檢核密碼則保留；`TYPE` 只送 `實體` 或 `線上`，遲到與請假狀態仍以 `attendance` sheet 為準。
+
+若 `formSubmissions` 出現「你沒有呼叫 UrlFetchApp.fetch 的權限」，代表 Apps Script 尚未授權外部 request。請把 `apps-script/appsscript.json` 的 oauthScopes 同步到 Apps Script manifest，執行一次 `authorizeGoogleFormAccess()` 並同意權限，然後重新部署既有 Web App 的新版本。
 
 出席統計規則：
 

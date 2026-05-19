@@ -1,5 +1,6 @@
 const DEFAULT_SEMESTER_ID = 'sem-114-down';
 const API_TOKEN = 'vvn719-attendance-token';
+const DEFAULT_GOOGLE_FORM_PASS = '303030';
 
 const SHEETS = {
   semesters: 'semesters',
@@ -202,7 +203,7 @@ function submitGoogleForms_(records, semesterId) {
     const logs = [];
 
     records.forEach(record => {
-      if (record.status === 'excluded') {
+      if (!shouldSubmitGoogleForm_(record.status)) {
         summary.skipped += 1;
         return;
       }
@@ -272,32 +273,24 @@ function submitGoogleForm_(record, student) {
   const qrUrl = student.qrUrl || student.prefilledUrl || student.qrLink || '';
   if (!qrUrl) throw new Error('Missing qrUrl');
 
-  const status = googleFormStatusFor_(record.status);
-  if (!status) return { skipped: true, message: 'excluded' };
+  const typeValue = googleFormTypeFor_(record.status);
+  if (!typeValue) return { skipped: true, message: 'status skipped' };
 
-  const note = googleFormCourseNoteFor_(record);
   return submitPrefilledFormUrl_(qrUrl, {
     idValue: student.formId || student.studentNo || student.id || record.studentId,
     nameValue: student.name || '',
-    checkValue: status,
-    courseNote: note
+    passValue: DEFAULT_GOOGLE_FORM_PASS,
+    typeValue
   });
 }
 
-function googleFormStatusFor_(status) {
-  return {
-    present: '出席',
-    online: '出席',
-    late: '遲到',
-    absent: '缺席'
-  }[status] || '';
+function shouldSubmitGoogleForm_(status) {
+  return ['present', 'online', 'late'].includes(status);
 }
 
-function googleFormCourseNoteFor_(record) {
-  if (record.note) return record.note;
-  if (record.status === 'online') return '線上（須整堂課上完）';
-  if (record.status === 'late') return '遲到';
-  if (record.status === 'absent') return '請假理由';
+function googleFormTypeFor_(status) {
+  if (status === 'online') return '線上';
+  if (status === 'present' || status === 'late') return '實體';
   return '';
 }
 
@@ -311,7 +304,14 @@ function submitPrefilledFormUrl_(qrUrl, values) {
   });
   const code = response.getResponseCode();
   if (code >= 400) throw new Error(`Google Form HTTP ${code}`);
-  return { ok: true, message: `HTTP ${code}` };
+  return { ok: true, message: `HTTP ${code}; ID=${values.idValue}; TYPE=${values.typeValue}` };
+}
+
+function authorizeGoogleFormAccess() {
+  const response = UrlFetchApp.fetch('https://www.google.com/generate_204', {
+    muteHttpExceptions: true
+  });
+  return `UrlFetchApp authorized: HTTP ${response.getResponseCode()}`;
 }
 
 function parsePrefilledFormUrl_(qrUrl, values) {
@@ -325,21 +325,44 @@ function parsePrefilledFormUrl_(qrUrl, values) {
     if (/^entry\.\d+/.test(key) && !entryKeys.includes(key)) entryKeys.push(key);
   });
 
-  if (entryKeys.length < 4) throw new Error('qrUrl missing Google Form entry fields');
+  if (entryKeys.length < 4) throw new Error('qrUrl must include ID, NAME, PASS, TYPE entry fields');
 
-  const idKey = findEntryKeyByValue_(params, entryKeys, values.idValue) || entryKeys[0];
-  const nameKey = findEntryKeyByValue_(params, entryKeys, values.nameValue, [idKey]) || firstUnusedEntryKey_(entryKeys, [idKey]) || entryKeys[1];
-  const checkKey = firstUnusedEntryKey_(entryKeys, [idKey, nameKey]) || entryKeys[2];
-  const noteKey = firstUnusedEntryKey_(entryKeys, [idKey, nameKey, checkKey]) || entryKeys[3];
+  const idKey = findEntryKeyByValue_(params, entryKeys, values.idValue)
+    || findEntryKeyByValue_(params, entryKeys, '__ID')
+    || entryKeys[0];
+  const nameKey = findEntryKeyByValue_(params, entryKeys, values.nameValue, [idKey])
+    || findEntryKeyByValue_(params, entryKeys, '__NAME', [idKey])
+    || firstUnusedEntryKey_(entryKeys, [idKey])
+    || entryKeys[1];
+  const passKey = findEntryKeyByValue_(params, entryKeys, '__PASS', [idKey, nameKey])
+    || findEntryKeyByValue_(params, entryKeys, values.passValue, [idKey, nameKey])
+    || firstUnusedEntryKey_(entryKeys, [idKey, nameKey])
+    || entryKeys[2];
+  const typeKey = findEntryKeyByValue_(params, entryKeys, '__TYPE', [idKey, nameKey, passKey])
+    || findEntryKeyByValue_(params, entryKeys, '實體', [idKey, nameKey, passKey])
+    || findEntryKeyByValue_(params, entryKeys, '線上', [idKey, nameKey, passKey])
+    || firstUnusedEntryKey_(entryKeys, [idKey, nameKey, passKey])
+    || entryKeys[3];
 
   const submitUrl = baseUrl.replace(/\/viewform$/, '/formResponse');
   const payload = {};
+  entryKeys.forEach(key => {
+    const match = params.find(item => item.key === key);
+    payload[key] = match ? match.value : '';
+  });
   payload[idKey] = values.idValue;
   payload[nameKey] = values.nameValue;
-  payload[checkKey] = values.checkValue;
-  payload[noteKey] = values.courseNote || '';
+  payload[passKey] = shouldPreserveFormValue_(payload[passKey], '__PASS')
+    ? payload[passKey]
+    : values.passValue;
+  payload[typeKey] = values.typeValue;
 
   return { submitUrl, payload };
+}
+
+function shouldPreserveFormValue_(value, placeholder) {
+  const normalized = String(value || '').trim();
+  return Boolean(normalized && normalized !== placeholder);
 }
 
 function parseQueryParams_(query) {
