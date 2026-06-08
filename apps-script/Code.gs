@@ -157,7 +157,17 @@ function saveAttendance_(payload) {
     : incoming;
 
   try {
-    const preservedRecords = readSheetObjects_(SHEETS.attendance)
+    const existingAttendance = readSheetObjects_(SHEETS.attendance);
+    const existingTargetRecords = targetClassId
+      ? existingAttendance.filter(record =>
+        semesterIdForRecord_(record) === semesterId && String(record.classId || '').trim() === targetClassId
+      )
+      : [];
+    if (targetClassId && existingTargetRecords.length && !payload.allowOverwrite) {
+      throw new Error(`Attendance already exists for semesterId=${semesterId} and classId=${targetClassId}. Please sync before overwriting.`);
+    }
+
+    const preservedRecords = existingAttendance
       .filter(record => {
         const sameSemester = semesterIdForRecord_(record) === semesterId;
         if (!sameSemester) return true;

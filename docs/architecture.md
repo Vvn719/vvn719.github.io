@@ -157,7 +157,7 @@ JSONP callback 參數會經 `/^[\w.$]+$/` 驗證，通過時回傳 JavaScript，
 }
 ```
 
-`saveAttendance_` 會使用 `LockService.getDocumentLock()` 防止同時寫入。若 payload 帶有 `classId`，寫入策略是「單堂課替換」：保留其他學期與同學期其他課程的 attendance，只替換目前課程 records。若沒有 `classId`，才沿用整學期替換模式。Attendance 寫入完成後，Apps Script 會依 payload 的 `classId` 只針對目前課程代送 Google Form；表單失敗不會 rollback attendance。
+`saveAttendance_` 會使用 `LockService.getDocumentLock()` 防止同時寫入。若 payload 帶有 `classId`，寫入策略是「單堂課替換」：保留其他學期與同學期其他課程的 attendance，只替換目前課程 records。若該課程雲端已有紀錄且 payload 沒有 `allowOverwrite`，會回傳錯誤，避免舊 cache 誤覆蓋既有資料。若沒有 `classId`，才沿用整學期替換模式。Attendance 寫入完成後，Apps Script 會依 payload 的 `classId` 只針對目前課程代送 Google Form；表單失敗不會 rollback attendance。
 
 Google Form 代送：
 
@@ -284,11 +284,13 @@ CSV 欄位：
    - `absent` 需要理由，不算出席。
    - `excluded` 不列入應到與出席統計。
 4. 目前課程 record 寫回 `attendanceRecords`。
-5. `attendancePayloadFromRecords()` 將目前記憶體中的 attendance 轉成 API payload。
-6. `persistAttendanceToApi()` POST `saveAttendance`。
-7. Apps Script 先只替換目前課程的 attendance，再針對目前課程代送 Google Form；`absent`、`excluded` 不送。
-8. 同一 `semesterId + classId + studentId` 已成功送過表單時會略過。
-9. 成功時 badge 顯示 `已同步`；Google Form 部分失敗會提示「點名已保存，但部分 Google Form 送出失敗」；儲存失敗時顯示 `儲存失敗`，但本機快取仍會更新。
+5. 若右上角不是 `已同步`，或背景同步尚未完成，前端會禁止送出。
+6. 若目前課程已有紀錄且畫面沒有新增或修改內容，前端會禁止重複送出。
+7. `attendancePayloadFromRecords()` 將目前記憶體中的 attendance 轉成 API payload。
+8. `persistAttendanceToApi()` POST `saveAttendance`。
+9. Apps Script 先只替換目前課程的 attendance，再針對目前課程代送 Google Form；`absent`、`excluded` 不送。
+10. 同一 `semesterId + classId + studentId` 已成功送過表單時會略過。
+11. 成功時 badge 顯示 `已同步`；Google Form 部分失敗會提示「點名已保存，但部分 Google Form 送出失敗」；儲存失敗時顯示 `儲存失敗`，但本機快取仍會更新。
 
 ### 匯出
 

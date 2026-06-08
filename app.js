@@ -94,6 +94,7 @@ const API_TOKEN = 'vvn719-attendance-token'
 const API_AUTH_ERROR_MESSAGE = 'API 驗證失敗，請檢查設定'
 let apiUrl = resolveApiUrl()
 let currentSemesterId = localStorage.getItem(SELECTED_SEMESTER_STORAGE_KEY) || DEFAULT_SEMESTERS[0].id
+let currentSyncState = apiUrl ? 'local' : 'unset'
 let syncInFlight = null
 let syncInFlightSemesterId = ''
 let queuedSyncSemesterId = ''
@@ -139,6 +140,7 @@ function updateSyncBadge(text, style = 'light') {
 }
 
 function setSyncState(state) {
+  currentSyncState = state
   const states = {
     syncing: ['🔄 同步中', 'warning'],
     synced: ['🟢 已同步', 'success'],
@@ -646,7 +648,7 @@ function currentDataSignature() {
   })
 }
 
-async function persistAttendanceToApi() {
+async function persistAttendanceToApi(options = {}) {
   if (!apiUrl) {
     setSyncState('unset')
     return { ok: false, skipped: true }
@@ -656,11 +658,24 @@ async function persistAttendanceToApi() {
   const result = await postApi('saveAttendance', {
     semesterId: currentSemesterId,
     classId: classItem?.id || '',
+    allowOverwrite: Boolean(options.allowOverwrite),
     records: attendancePayloadFromRecords()
   })
   if (result && result.ok === false) throw new Error(apiErrorMessage(result, 'API save failed'))
   setSyncState('synced')
   return result
+}
+
+function canSubmitAttendanceToCloud() {
+  return apiUrl && currentSyncState === 'synced' && !syncInFlight
+}
+
+function attendanceRecordSignature(record = new Map()) {
+  return JSON.stringify(
+    Array.from(record.entries())
+      .map(([key, item]) => [key, item.status || '', item.note || ''])
+      .sort((a, b) => a[0].localeCompare(b[0]))
+  )
 }
 
 function shouldSkipBackgroundSync(options = {}) {
@@ -2216,9 +2231,33 @@ function setSubmitLoading(isLoading, text = '同步中，請稍候...') {
   if (submitButton) submitButton.disabled = isLoading
 }
 
+function buildCurrentClassAttendanceRecord() {
+  const record = new Map()
+  currentStudents.forEach(student => {
+    if (excluded.has(student.key)) {
+      record.set(student.key, { status: 'excluded', note: '不列入出席' })
+      return
+    }
+    const special = specialNotes.get(student.key)
+    if (special?.type === 'absent') record.set(student.key, { status: 'absent', note: special.note })
+    else if (special?.type === 'online') record.set(student.key, { status: 'online', note: special.note })
+    else if (special?.type === 'late') record.set(student.key, { status: 'late', note: special.note })
+    else if (isPresent(student)) record.set(student.key, { status: 'present', note: '已報到' })
+  })
+  return record
+}
+
 async function submitAttendance() {
   if (!currentClasses.length || !currentClass()?.id) {
     await showMessage('請先新增課程', '尚未設定課程')
+    return
+  }
+
+  if (!canSubmitAttendanceToCloud()) {
+    const message = syncInFlight
+      ? '資料正在同步中，請等右上角顯示「已同步」後再送出。'
+      : '目前資料尚未完成雲端同步，請先同步，等右上角顯示「已同步」後再送出。'
+    await showMessage(message, '尚未同步完成')
     return
   }
 
@@ -2226,6 +2265,16 @@ async function submitAttendance() {
   const pendingStudents = checkedStudents.filter(student => !confirmed.has(student.key))
   if (!checkedStudents.length) {
     await showMessage('請先勾選有來的人', '尚未勾選')
+    return
+  }
+
+  const classIndex = String(classSelect.value || 0)
+  const existingRecord = new Map(attendanceRecords.get(classIndex) || [])
+  const nextRecord = buildCurrentClassAttendanceRecord()
+  const hasExistingRecord = existingRecord.size > 0
+  const hasRecordChanges = attendanceRecordSignature(existingRecord) !== attendanceRecordSignature(nextRecord)
+  if (hasExistingRecord && !pendingStudents.length && !hasRecordChanges) {
+    await showMessage('這堂課已經有報到紀錄，且目前畫面沒有新增或修改內容。為避免重複寫入，請勿重複送出。', '已有紀錄')
     return
   }
 
@@ -2238,20 +2287,7 @@ async function submitAttendance() {
   let message = pendingStudents.length ? `已送出 ${pendingStudents.length} 人報到。` : '目前沒有新增報到人員。'
 
   try {
-    const classIndex = String(classSelect.value || 0)
-    const record = new Map()
-    currentStudents.forEach(student => {
-      if (excluded.has(student.key)) {
-        record.set(student.key, { status: 'excluded', note: '不列入出席' })
-        return
-      }
-      const special = specialNotes.get(student.key)
-      if (special?.type === 'absent') record.set(student.key, { status: 'absent', note: special.note })
-      else if (special?.type === 'online') record.set(student.key, { status: 'online', note: special.note })
-      else if (special?.type === 'late') record.set(student.key, { status: 'late', note: special.note })
-      else if (isPresent(student)) record.set(student.key, { status: 'present', note: '已報到' })
-    })
-    attendanceRecords.set(classIndex, record)
+    attendanceRecords.set(classIndex, nextRecord)
 
     checkedStudents.forEach(student => {
       confirmed.add(student.key)
@@ -2264,7 +2300,7 @@ async function submitAttendance() {
     })
 
     try {
-      const result = await persistAttendanceToApi()
+      const result = await persistAttendanceToApi({ allowOverwrite: hasExistingRecord })
       if (result?.skipped) cacheSource = 'local'
       if (result && result.ok === false) throw new Error(apiErrorMessage(result, 'API save failed'))
       if (result?.formSubmissions?.failed > 0) formSubmissionFailed = true

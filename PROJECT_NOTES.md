@@ -21,6 +21,8 @@
 - 正式點名前請先複製 Google Sheet，或至少建立 `attendance` backup 工作表。
 - 修改 Apps Script 後，必須重新部署 Web App；只儲存程式碼不會更新正式 `/exec`。
 - `saveAttendance` 帶有 `classId` 時只會替換同學期同課程 attendance；避免誤送單堂課時清掉其他課程紀錄。送出前仍應先確認同步成功。
+- 前端在右上角不是 `已同步`、或仍有同步進行中時，會禁止送出報到。
+- 若雲端該課程已有 attendance，但前端沒有帶 `allowOverwrite`，Apps Script 會拒絕寫入，避免舊 cache 誤覆蓋既有資料。
 - `saveAttendance` 寫入 attendance 後會針對目前課程代送 Google Form；表單失敗不會 rollback attendance，請查看 `formSubmissions`。
 - 所有 `doPost` actions 都需要 `payload.apiToken` 等於 Apps Script 的 `API_TOKEN`；前端 `postApi()` 會自動帶入同名常數。若 token 不一致，畫面會顯示「API 驗證失敗，請檢查設定」。
 - 目前 `API_TOKEN` 寫在前端與 Apps Script 常數裡，只是簡易防誤寫，不是真正私密驗證。
@@ -115,7 +117,7 @@ POST actions：
 - `importStudents`：匯入目前學期學生名單，替換 `students` 同學期 rows。
 - `importClasses`：匯入目前學期課程，替換 `classes` 同學期 rows。
 
-注意：`saveAttendance` 若收到 `classId`，會保留其他學期與同學期其他課程 records，只替換目前課程的 attendance。若沒有 `classId`，才會沿用整學期替換模式。Attendance 保存後會依 payload 的 `classId` 只針對目前課程代送 Google Form，失敗會記錄到 `formSubmissions`，但不會回滾 attendance。
+注意：`saveAttendance` 若收到 `classId`，會保留其他學期與同學期其他課程 records，只替換目前課程的 attendance。若該課程雲端已有紀錄且 payload 沒有 `allowOverwrite`，Apps Script 會拒絕寫入；若沒有 `classId`，才會沿用整學期替換模式。Attendance 保存後會依 payload 的 `classId` 只針對目前課程代送 Google Form，失敗會記錄到 `formSubmissions`，但不會回滾 attendance。
 
 CSV 匯入流程：前端先解析 CSV 並顯示預覽，確認後才寫入 Google Sheet，寫入完成會重新同步前端資料。匯入不會移除程式內建 fallback data。學生 CSV 欄位為 `id`, `group`, `role`, `unit`, `name`, `studentNo`, `formId`, `qrUrl`, `url`, `active`, `sortOrder`, `semesterId`；`qrUrl` 也接受 `qrLink` 或 `prefilledUrl` 欄名。課程 CSV 欄位為 `id`, `semesterId`, `date`, `title`, `sortOrder`。
 
@@ -163,11 +165,13 @@ CSV 匯入流程：前端先解析 CSV 並顯示預覽，確認後才寫入 Goog
 1. 使用者設定出席狀態。
 2. `submitAttendance()` 建立目前課程 record。
 3. 寫入 `attendanceRecords`。
-4. `attendancePayloadFromRecords()` 產生目前記憶體中的 attendance payload。
-5. `persistAttendanceToApi()` 呼叫 `saveAttendance`。
-6. Apps Script 保存 attendance 後針對目前課程代送 Google Form；只送 `present`、`online`、`late`，`absent` 與 `excluded` 不送。
-7. 同一 `semesterId + classId + studentId` 已成功送過表單時會略過。
-8. 成功顯示 `已同步`；Google Form 部分失敗時顯示「點名已保存，但部分 Google Form 送出失敗」；儲存失敗時顯示 `儲存失敗` 並保留本機快取。
+4. 若目前不是 `已同步`，或背景同步尚未完成，會禁止送出。
+5. 若目前課程已有紀錄且沒有新增或修改內容，會禁止重複送出。
+6. `attendancePayloadFromRecords()` 產生目前記憶體中的 attendance payload。
+7. `persistAttendanceToApi()` 呼叫 `saveAttendance`。
+8. Apps Script 保存 attendance 後針對目前課程代送 Google Form；只送 `present`、`online`、`late`，`absent` 與 `excluded` 不送。
+9. 同一 `semesterId + classId + studentId` 已成功送過表單時會略過。
+10. 成功顯示 `已同步`；Google Form 部分失敗時顯示「點名已保存，但部分 Google Form 送出失敗」；儲存失敗時顯示 `儲存失敗` 並保留本機快取。
 
 Google Form 代送目前只處理簽到表單四欄：`ID`、`NAME`、`PASS`、`TYPE`。`PASS` 預設 `303030`，若 QR/prefilled URL 原本已有檢核密碼則保留；`TYPE` 只送 `實體` 或 `線上`，遲到與請假狀態仍以 `attendance` sheet 為準。
 
