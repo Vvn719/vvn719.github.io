@@ -454,6 +454,35 @@ function loadAttendanceRecords(records = []) {
     record.set(student.key, { status: item.status, note: item.note || '' })
     attendanceRecords.set(recordKey, record)
   })
+  applyExcludedCascadeFromRecords()
+}
+
+function applyExcludedCascadeFromRecords() {
+  const excludedStarts = new Map()
+
+  attendanceRecords.forEach((record, recordKey) => {
+    const classIndex = Number(recordKey)
+    if (!Number.isFinite(classIndex)) return
+
+    record.forEach((item, key) => {
+      if (item.status !== 'excluded') return
+      const currentStart = excludedStarts.get(key)
+      if (currentStart === undefined || classIndex < currentStart) {
+        excludedStarts.set(key, classIndex)
+      }
+    })
+  })
+
+  excludedStarts.forEach((startIndex, key) => {
+    for (let index = startIndex; index < currentClasses.length; index += 1) {
+      const recordKey = String(index)
+      const record = new Map(attendanceRecords.get(recordKey) || [])
+      const current = record.get(key)
+      if (current && current.status !== 'excluded') continue
+      record.set(key, { status: 'excluded', note: '不列入出席' })
+      attendanceRecords.set(recordKey, record)
+    }
+  })
 }
 
 function applyDataSet(data = {}) {

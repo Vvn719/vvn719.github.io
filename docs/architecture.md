@@ -271,7 +271,7 @@ CSV 欄位：
 2. 依使用者偏好、目前學期或 active 學期決定 `currentSemesterId`。
 3. 讀取該學期的 `classes`、`students`、`attendance`。
 4. `applyDataSet()` 正規化資料、排序、濾掉停用學生。
-5. `loadAttendanceRecords()` 把 API records 放入 `attendanceRecords`。
+5. `loadAttendanceRecords()` 把 API records 放入 `attendanceRecords`，並依每位學生最早的 `excluded` 紀錄往後推導不列入出席；若後面課堂已有其他明確 attendance 狀態，前端不覆蓋既有紀錄。
 6. `restoreStateForSelectedClass()` 將目前課程的紀錄還原到 UI 狀態。
 7. 重新 render，並保存 `localStorage` 快取。
 
