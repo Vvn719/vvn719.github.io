@@ -140,6 +140,7 @@ function saveAttendance_(payload) {
   const lock = LockService.getDocumentLock();
   lock.waitLock(30000);
   const semesterId = payload.semesterId || DEFAULT_SEMESTER_ID;
+  const targetClassId = String(payload.classId || '').trim();
   const updatedAt = new Date().toISOString();
   const incoming = (payload.records || [])
     .filter(record => record.semesterId && record.classId && record.studentId && record.status)
@@ -151,11 +152,19 @@ function saveAttendance_(payload) {
       note: record.note || '',
       updatedAt
     }));
+  const incomingForSave = targetClassId
+    ? incoming.filter(record => record.classId === targetClassId)
+    : incoming;
 
   try {
-    const existingOtherSemesters = readSheetObjects_(SHEETS.attendance)
-      .filter(record => record.semesterId !== semesterId);
-    const allRecords = existingOtherSemesters.concat(incoming);
+    const preservedRecords = readSheetObjects_(SHEETS.attendance)
+      .filter(record => {
+        const sameSemester = semesterIdForRecord_(record) === semesterId;
+        if (!sameSemester) return true;
+        if (!targetClassId) return false;
+        return String(record.classId || '').trim() !== targetClassId;
+      });
+    const allRecords = preservedRecords.concat(incomingForSave);
     const sheet = getSpreadsheet_().getSheetByName(SHEETS.attendance);
     const headers = HEADERS.attendance;
     const lastRow = sheet.getLastRow();
@@ -170,12 +179,8 @@ function saveAttendance_(payload) {
     lock.releaseLock();
   }
 
-  const targetClassId = payload.classId || '';
-  const formRecords = targetClassId
-    ? incoming.filter(record => record.classId === targetClassId)
-    : incoming;
-  const formSubmissions = submitGoogleForms_(formRecords, semesterId);
-  return { ok: true, count: incoming.length, updatedAt, formSubmissions };
+  const formSubmissions = submitGoogleForms_(incomingForSave, semesterId);
+  return { ok: true, count: incomingForSave.length, updatedAt, formSubmissions };
 }
 
 function submitGoogleForms_(records, semesterId) {

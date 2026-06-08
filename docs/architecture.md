@@ -157,7 +157,7 @@ JSONP callback 參數會經 `/^[\w.$]+$/` 驗證，通過時回傳 JavaScript，
 }
 ```
 
-`saveAttendance_` 會使用 `LockService.getDocumentLock()` 防止同時寫入。寫入策略是「整個學期替換」：保留其他學期的 attendance，清空目前學期既有 records，再寫入前端送來的全部 records。這代表前端送出前應先同步完整學期資料，避免以不完整本機資料覆蓋該學期。Attendance 寫入完成後，Apps Script 會依 payload 的 `classId` 只針對目前課程代送 Google Form；表單失敗不會 rollback attendance。
+`saveAttendance_` 會使用 `LockService.getDocumentLock()` 防止同時寫入。若 payload 帶有 `classId`，寫入策略是「單堂課替換」：保留其他學期與同學期其他課程的 attendance，只替換目前課程 records。若沒有 `classId`，才沿用整學期替換模式。Attendance 寫入完成後，Apps Script 會依 payload 的 `classId` 只針對目前課程代送 Google Form；表單失敗不會 rollback attendance。
 
 Google Form 代送：
 
@@ -284,9 +284,9 @@ CSV 欄位：
    - `absent` 需要理由，不算出席。
    - `excluded` 不列入應到與出席統計。
 4. 目前課程 record 寫回 `attendanceRecords`。
-5. `attendancePayloadFromRecords()` 將整個記憶體中的學期 attendance 轉成 API payload。
+5. `attendancePayloadFromRecords()` 將目前記憶體中的 attendance 轉成 API payload。
 6. `persistAttendanceToApi()` POST `saveAttendance`。
-7. Apps Script 先保存 attendance，再針對目前課程代送 Google Form；`excluded` 不送。
+7. Apps Script 先只替換目前課程的 attendance，再針對目前課程代送 Google Form；`absent`、`excluded` 不送。
 8. 同一 `semesterId + classId + studentId` 已成功送過表單時會略過。
 9. 成功時 badge 顯示 `已同步`；Google Form 部分失敗會提示「點名已保存，但部分 Google Form 送出失敗」；儲存失敗時顯示 `儲存失敗`，但本機快取仍會更新。
 
@@ -334,7 +334,7 @@ CSV 欄位：
 ## 下一步 Roadmap
 
 - 將 `index.html` 拆分為 HTML、CSS、JS modules，降低單檔維護成本。
-- 將 `saveAttendance` 從整學期替換改成依 `semesterId + classId + studentId` upsert，降低覆蓋風險。
+- 評估將 `saveAttendance` 從單堂課替換再細化為依 `semesterId + classId + studentId` upsert，進一步降低覆蓋風險。
 - 為管理模式補登入或簡單 passcode，避免公開頁面直接寫入 Sheet。
 - 增加匯入結果報告，例如新增、更新、略過、錯誤列。
 - 匯入課程或學生前檢查既有 attendance 是否會被孤立，並提示 ID 變更風險。
