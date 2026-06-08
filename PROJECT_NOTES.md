@@ -20,6 +20,7 @@
 
 - 正式點名前請先複製 Google Sheet，或至少建立 `attendance` backup 工作表。
 - 修改 Apps Script 後，必須重新部署 Web App；只儲存程式碼不會更新正式 `/exec`。
+- Apps Script `Code.gs` 需以 repo 版本為準；舊版線上程式若仍用整學期覆蓋的 `saveAttendance_()`，會有覆蓋 attendance 風險。
 - `saveAttendance` 帶有 `classId` 時只會替換同學期同課程 attendance；避免誤送單堂課時清掉其他課程紀錄。送出前仍應先確認同步成功。
 - 前端在右上角不是 `已同步`、或仍有同步進行中時，會禁止送出報到。
 - 若雲端該課程已有 attendance，但前端沒有帶 `allowOverwrite`，Apps Script 會拒絕寫入，避免舊 cache 誤覆蓋既有資料。
