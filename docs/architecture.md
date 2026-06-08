@@ -157,7 +157,7 @@ JSONP callback 參數會經 `/^[\w.$]+$/` 驗證，通過時回傳 JavaScript，
 }
 ```
 
-`saveAttendance_` 會使用 `LockService.getDocumentLock()` 防止同時寫入。若 payload 帶有 `classId`，寫入策略是「單堂課替換」：保留其他學期與同學期其他課程的 attendance，只替換目前課程 records。若該課程雲端已有紀錄且 payload 沒有 `allowOverwrite`，會回傳錯誤，避免舊 cache 誤覆蓋既有資料。若沒有 `classId`，才沿用整學期替換模式。Attendance 寫入完成後，Apps Script 會依 payload 的 `classId` 只針對目前課程代送 Google Form；表單失敗不會 rollback attendance。
+`saveAttendance_` 會使用 `LockService.getDocumentLock()` 防止同時寫入。若 payload 帶有 `classId`，寫入策略是「單堂課替換」：保留其他學期與同學期其他課程的 attendance，只替換目前課程 records；但 `excluded` 會以同學期整體重新整理，讓「不列入出席」能從被標記那堂開始往後代入。若該課程雲端已有紀錄且 payload 沒有 `allowOverwrite`，會回傳錯誤，避免舊 cache 誤覆蓋既有資料。若沒有 `classId`，才沿用整學期替換模式。Attendance 寫入完成後，Apps Script 會依 payload 的 `classId` 只針對目前課程代送 Google Form；表單失敗不會 rollback attendance。
 
 Google Form 代送：
 

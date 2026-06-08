@@ -22,6 +22,7 @@
 - 修改 Apps Script 後，必須重新部署 Web App；只儲存程式碼不會更新正式 `/exec`。
 - Apps Script `Code.gs` 需以 repo 版本為準；舊版線上程式若仍用整學期覆蓋的 `saveAttendance_()`，會有覆蓋 attendance 風險。
 - `saveAttendance` 帶有 `classId` 時只會替換同學期同課程 attendance；避免誤送單堂課時清掉其他課程紀錄。送出前仍應先確認同步成功。
+- `excluded` 仍會以整學期為邊界同步保存，讓「不列入出席」可從被標記那堂開始往後代入。
 - 前端在右上角不是 `已同步`、或仍有同步進行中時，會禁止送出報到。
 - 若雲端該課程已有 attendance，但前端沒有帶 `allowOverwrite`，Apps Script 會拒絕寫入，避免舊 cache 誤覆蓋既有資料。
 - `saveAttendance` 寫入 attendance 後會針對目前課程代送 Google Form；表單失敗不會 rollback attendance，請查看 `formSubmissions`。
@@ -118,7 +119,7 @@ POST actions：
 - `importStudents`：匯入目前學期學生名單，替換 `students` 同學期 rows。
 - `importClasses`：匯入目前學期課程，替換 `classes` 同學期 rows。
 
-注意：`saveAttendance` 若收到 `classId`，會保留其他學期與同學期其他課程 records，只替換目前課程的 attendance。若該課程雲端已有紀錄且 payload 沒有 `allowOverwrite`，Apps Script 會拒絕寫入；若沒有 `classId`，才會沿用整學期替換模式。Attendance 保存後會依 payload 的 `classId` 只針對目前課程代送 Google Form，失敗會記錄到 `formSubmissions`，但不會回滾 attendance。
+注意：`saveAttendance` 若收到 `classId`，會保留其他學期與同學期其他課程 records，只替換目前課程的 attendance；但 `excluded` 會用 payload 中同學期的 excluded records 重新整理，以保留「不列入出席往後代入」行為。若該課程雲端已有紀錄且 payload 沒有 `allowOverwrite`，Apps Script 會拒絕寫入；若沒有 `classId`，才會沿用整學期替換模式。Attendance 保存後會依 payload 的 `classId` 只針對目前課程代送 Google Form，失敗會記錄到 `formSubmissions`，但不會回滾 attendance。
 
 CSV 匯入流程：前端先解析 CSV 並顯示預覽，確認後才寫入 Google Sheet，寫入完成會重新同步前端資料。匯入不會移除程式內建 fallback data。學生 CSV 欄位為 `id`, `group`, `role`, `unit`, `name`, `studentNo`, `formId`, `qrUrl`, `url`, `active`, `sortOrder`, `semesterId`；`qrUrl` 也接受 `qrLink` 或 `prefilledUrl` 欄名。課程 CSV 欄位為 `id`, `semesterId`, `date`, `title`, `sortOrder`。
 

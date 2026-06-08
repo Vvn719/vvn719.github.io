@@ -155,6 +155,9 @@ function saveAttendance_(payload) {
   const incomingForSave = targetClassId
     ? incoming.filter(record => record.classId === targetClassId)
     : incoming;
+  const incomingExcludedForOtherClasses = targetClassId
+    ? incoming.filter(record => record.classId !== targetClassId && record.status === 'excluded')
+    : [];
 
   try {
     const existingAttendance = readSheetObjects_(SHEETS.attendance);
@@ -172,9 +175,10 @@ function saveAttendance_(payload) {
         const sameSemester = semesterIdForRecord_(record) === semesterId;
         if (!sameSemester) return true;
         if (!targetClassId) return false;
+        if (record.status === 'excluded') return false;
         return String(record.classId || '').trim() !== targetClassId;
       });
-    const allRecords = preservedRecords.concat(incomingForSave);
+    const allRecords = preservedRecords.concat(incomingForSave, incomingExcludedForOtherClasses);
     const sheet = getSpreadsheet_().getSheetByName(SHEETS.attendance);
     const headers = HEADERS.attendance;
     const lastRow = sheet.getLastRow();
