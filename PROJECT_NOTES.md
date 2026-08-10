@@ -9,7 +9,7 @@
 ## 目前版本狀態
 
 - GitHub Pages 版本以 `origin/main` 最新 commit 為準。
-- GitHub Pages 已確認可讀到拆分後版本；目前 `index.html` 載入 `app.js?v=16`。
+- GitHub Pages 已確認可讀到拆分後版本；目前 `index.html` 載入 `app.js?v=17`。
 - 前端已拆為 `index.html` + `app.js`；主要業務邏輯在 `app.js`。
 - 目前 `DEFAULT_API_URL` 指向 Apps Script `/exec` URL，且 `normalizeApiUrl()` 會拒絕非 `/exec` 的 Apps Script URL。
 - 已支援多學期、每學期 cache、自動同步、管理模式、課程單筆編輯、學生 CSV 匯入、課程 CSV 匯入、複製學期、Excel 匯出。
@@ -24,6 +24,7 @@
 - `saveAttendance` 帶有 `classId` 時只會替換同學期同課程 attendance；避免誤送單堂課時清掉其他課程紀錄。送出前仍應先確認同步成功。
 - `excluded` 仍會以整學期為邊界同步保存，讓「不列入出席」可從被標記那堂開始往後代入；前端載入既有 attendance 時也會依最早的 `excluded` 紀錄往後推導，避免舊資料只顯示單堂課。
 - 前端在右上角不是 `已同步`、或仍有同步進行中時，會禁止送出報到。
+- 課程載入後會依今天日期自動選擇當天或最近的課程；使用者手動切換課程後，背景同步不會覆蓋手動選擇。
 - 若雲端該課程已有 attendance，但前端沒有帶 `allowOverwrite`，Apps Script 會拒絕寫入，避免舊 cache 誤覆蓋既有資料。
 - `saveAttendance` 寫入 attendance 後會針對目前課程代送 Google Form；表單失敗不會 rollback attendance，請查看 `formSubmissions`。
 - 所有 `doPost` actions 都需要 `payload.apiToken` 等於 Apps Script 的 `API_TOKEN`；前端 `postApi()` 會自動帶入同名常數。若 token 不一致，畫面會顯示「API 驗證失敗，請檢查設定」。

@@ -98,6 +98,7 @@ let currentSyncState = apiUrl ? 'local' : 'unset'
 let syncInFlight = null
 let syncInFlightSemesterId = ''
 let queuedSyncSemesterId = ''
+let autoClassSelectionPending = true
 const adminImportState = {
   students: { rows: [], errors: [], fileName: '' },
   classes: { rows: [], errors: [], fileName: '' }
@@ -127,6 +128,51 @@ function initClasses() {
   classSelect.innerHTML = currentClasses.length
     ? currentClasses.map((item, index) => `<option value="${index}">${item.date}　${item.title}</option>`).join('')
     : '<option value="0">尚未設定課程</option>'
+}
+
+function classDateTimestamp(classItem) {
+  const match = String(classItem?.date || '').match(/(\d{1,2})\s*\/\s*(\d{1,2})/)
+  if (!match) return null
+  const month = Number(match[1])
+  const day = Number(match[2])
+  if (!Number.isInteger(month) || !Number.isInteger(day) || month < 1 || month > 12 || day < 1 || day > 31) return null
+  const year = academicYearForClassMonth(month)
+  return new Date(year, month - 1, day).getTime()
+}
+
+function academicYearForClassMonth(month) {
+  const semester = currentSemester()
+  const idYear = /^sem-(\d{3})-/.exec(currentSemesterId)?.[1]
+  const rocYear = Number(semester.year || idYear)
+  if (!Number.isFinite(rocYear)) return new Date().getFullYear()
+  const baseYear = rocYear + 1911
+  const isDownSemester = semester.term === '下' || /-down$/.test(currentSemesterId)
+  return isDownSemester && month <= 7 ? baseYear + 1 : baseYear
+}
+
+function nearestClassIndexForDate(date = new Date()) {
+  const today = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  let bestIndex = -1
+  let bestDiff = Number.POSITIVE_INFINITY
+  let bestTimestamp = 0
+
+  currentClasses.forEach((classItem, index) => {
+    const timestamp = classDateTimestamp(classItem)
+    if (timestamp === null) return
+    const diff = Math.abs(timestamp - today)
+    if (diff < bestDiff || (diff === bestDiff && timestamp <= today && timestamp > bestTimestamp)) {
+      bestIndex = index
+      bestDiff = diff
+      bestTimestamp = timestamp
+    }
+  })
+
+  return bestIndex >= 0 ? bestIndex : (currentClasses.length ? 0 : -1)
+}
+
+function autoSelectClassByDate() {
+  const index = nearestClassIndexForDate()
+  if (index >= 0) classSelect.value = String(index)
 }
 
 function initSemesters() {
@@ -486,6 +532,7 @@ function applyExcludedCascadeFromRecords() {
 }
 
 function applyDataSet(data = {}) {
+  const requestedSemesterId = data.semesterId || currentSemesterId
   const selectedClassId = currentClass()?.id || ''
   applySemesters(data.semesters || semesters, data.semesterId || currentSemesterId)
 
@@ -505,7 +552,12 @@ function applyDataSet(data = {}) {
   assignStudentKeys()
   initClasses()
   const nextClassIndex = currentClasses.findIndex(item => item.id === selectedClassId)
-  if (nextClassIndex >= 0) classSelect.value = String(nextClassIndex)
+  if (autoClassSelectionPending || requestedSemesterId !== currentSemesterId || nextClassIndex < 0) {
+    autoSelectClassByDate()
+    autoClassSelectionPending = false
+  } else {
+    classSelect.value = String(nextClassIndex)
+  }
   loadAttendanceRecords(data.records || data.attendance || [])
   restoreStateForSelectedClass()
   renderList()
@@ -797,6 +849,7 @@ async function reloadFromApi(options = {}) {
 
 async function switchSemester(semesterId) {
   if (!semesterId || semesterId === currentSemesterId) return
+  autoClassSelectionPending = true
   currentSemesterId = semesterId
   localStorage.setItem(SELECTED_SEMESTER_STORAGE_KEY, currentSemesterId)
   initSemesters()
@@ -2377,6 +2430,7 @@ function runSelfTests() {
 searchEl.addEventListener('input', renderList)
 semesterSelect.addEventListener('change', event => switchSemester(event.target.value))
 classSelect.addEventListener('change', () => {
+  autoClassSelectionPending = false
   restoreStateForSelectedClass()
   renderList()
 })
