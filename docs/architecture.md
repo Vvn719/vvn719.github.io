@@ -126,6 +126,7 @@ API 入口是 Apps Script Web App URL。前端預設 URL 存在 `DEFAULT_API_URL
 | --- | --- |
 | `setup` | `{ ok: true, setup: true }`，並確保四張表存在。 |
 | `semesters` | `{ ok: true, semesters: [...] }`。 |
+| `bootstrapSemester&semesterId=...` | `{ ok: true, semesterId, semesters, classes, students, records }`，一次回傳同步所需資料。 |
 | `classes&semesterId=...` | `{ ok: true, classes: [...] }`，依學期過濾。 |
 | `students&semesterId=...` | `{ ok: true, students: [...] }`，依學期過濾。 |
 | `attendance&semesterId=...` | `{ ok: true, records: [...] }`，依學期過濾。 |
@@ -267,9 +268,9 @@ CSV 欄位：
 
 ### 讀取 / 同步
 
-1. `reloadFromApi()` 先讀 `semesters`。
-2. 依使用者偏好、目前學期或 active 學期決定 `currentSemesterId`。
-3. 讀取該學期的 `classes`、`students`、`attendance`。
+1. `reloadFromApi()` 優先呼叫 `bootstrapSemester`，一次讀取學期清單與指定學期的 `classes`、`students`、`attendance`。
+2. 若 `bootstrapSemester` 不可用或失敗，前端會退回舊流程，先讀 `semesters`，再依使用者偏好、目前學期或 active 學期決定 `currentSemesterId`。
+3. 舊流程會分別讀取該學期的 `classes`、`students`、`attendance`。
 4. `applyDataSet()` 正規化資料、排序、濾掉停用學生。
 5. 課程下拉會在初次載入或切換學期時依今天日期自動選擇當天或最近課程；使用者手動切換後，背景同步會保留手動選擇。
 6. `loadAttendanceRecords()` 把 API records 放入 `attendanceRecords`，並依每位學生最早的 `excluded` 紀錄往後推導不列入出席；若後面課堂已有其他明確 attendance 狀態，前端不覆蓋既有紀錄。

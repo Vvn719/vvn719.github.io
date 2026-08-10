@@ -9,7 +9,7 @@
 ## 目前版本狀態
 
 - GitHub Pages 版本以 `origin/main` 最新 commit 為準。
-- GitHub Pages 已確認可讀到拆分後版本；目前 `index.html` 載入 `app.js?v=17`。
+- GitHub Pages 已確認可讀到拆分後版本；目前 `index.html` 載入 `app.js?v=18`。
 - 前端已拆為 `index.html` + `app.js`；主要業務邏輯在 `app.js`。
 - 目前 `DEFAULT_API_URL` 指向 Apps Script `/exec` URL，且 `normalizeApiUrl()` 會拒絕非 `/exec` 的 Apps Script URL。
 - 已支援多學期、每學期 cache、自動同步、管理模式、課程單筆編輯、學生 CSV 匯入、課程 CSV 匯入、複製學期、Excel 匯出。
@@ -20,6 +20,7 @@
 
 - 正式點名前請先複製 Google Sheet，或至少建立 `attendance` backup 工作表。
 - 修改 Apps Script 後，必須重新部署 Web App；只儲存程式碼不會更新正式 `/exec`。
+- Apps Script 已新增 `bootstrapSemester` 讀取 API；前端同步會優先用它一次讀取 semesters/classes/students/attendance，若線上 Apps Script 尚未部署新版則會自動退回舊的多次讀取流程。
 - Apps Script `Code.gs` 需以 repo 版本為準；舊版線上程式若仍用整學期覆蓋的 `saveAttendance_()`，會有覆蓋 attendance 風險。
 - `saveAttendance` 帶有 `classId` 時只會替換同學期同課程 attendance；避免誤送單堂課時清掉其他課程紀錄。送出前仍應先確認同步成功。
 - `excluded` 仍會以整學期為邊界同步保存，讓「不列入出席」可從被標記那堂開始往後代入；前端載入既有 attendance 時也會依最早的 `excluded` 紀錄往後推導，避免舊資料只顯示單堂課。
@@ -104,6 +105,7 @@ GET actions：
 
 - `setup`：建表與 seed 預設資料。
 - `semesters`：讀學期。
+- `bootstrapSemester&semesterId=...`：一次讀學期清單、指定學期課程、人員與 attendance。
 - `classes&semesterId=...`：讀指定學期課程。
 - `students&semesterId=...`：讀指定學期人員。
 - `attendance&semesterId=...`：讀指定學期 attendance。
@@ -157,9 +159,9 @@ CSV 匯入流程：前端先解析 CSV 並顯示預覽，確認後才寫入 Goog
 
 同步讀取：
 
-1. `reloadFromApi()` 讀 `semesters`。
-2. 決定目前學期。
-3. 讀該學期 `classes`、`students`、`attendance`。
+1. `reloadFromApi()` 優先呼叫 `bootstrapSemester`。
+2. 一次取得學期清單與指定學期的 `classes`、`students`、`attendance`。
+3. 若 `bootstrapSemester` 失敗，退回舊流程：讀 `semesters` 後再分別讀 `classes`、`students`、`attendance`。
 4. `applyDataSet()` 正規化資料並 render。
 5. `saveDataCache('api')` 保存本機快取。
 

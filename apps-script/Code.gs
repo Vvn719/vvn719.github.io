@@ -100,6 +100,7 @@ function doGet(e) {
     setup();
     const action = params.action || 'bootstrap';
     if (action === 'setup') return respond_({ ok: true, setup: true }, callback);
+    if (action === 'bootstrapSemester') return respond_(bootstrapSemester_(params.semesterId), callback);
     if (action === 'semesters') return respond_({ ok: true, semesters: readSheetObjects_(SHEETS.semesters) }, callback);
     if (action === 'classes') return respond_({ ok: true, classes: filterBySemester_(readSheetObjects_(SHEETS.classes), params.semesterId) }, callback);
     if (action === 'students') return respond_({ ok: true, students: filterBySemester_(readSheetObjects_(SHEETS.students), params.semesterId) }, callback);
@@ -114,6 +115,19 @@ function doGet(e) {
   } catch (error) {
     return respond_({ ok: false, error: String(error && error.message ? error.message : error) }, callback);
   }
+}
+
+function bootstrapSemester_(semesterId) {
+  const semesters = readSheetObjects_(SHEETS.semesters);
+  const requestedSemesterId = semesterId || DEFAULT_SEMESTER_ID;
+  return {
+    ok: true,
+    semesterId: requestedSemesterId,
+    semesters,
+    classes: filterBySemester_(readSheetObjects_(SHEETS.classes), requestedSemesterId),
+    students: filterBySemester_(readSheetObjects_(SHEETS.students), requestedSemesterId),
+    records: filterBySemester_(readSheetObjects_(SHEETS.attendance), requestedSemesterId)
+  };
 }
 
 function doPost(e) {

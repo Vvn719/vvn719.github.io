@@ -773,33 +773,7 @@ async function performApiSync(options = {}) {
   setSyncState('syncing')
 
   try {
-    const preferredSemesterId = options.semesterId || currentSemesterId
-    let nextSemesters = semesters
-    let semesterId = preferredSemesterId
-
-    if (options.includeSemesters) {
-      const semesterData = await jsonpRequest('semesters')
-      nextSemesters = (semesterData.semesters || []).map(normalizeSemester)
-      const requestedSemester = nextSemesters.find(item => item.id === preferredSemesterId)
-      const activeSemester = nextSemesters.find(item => item.status === 'active') || nextSemesters[0]
-      semesterId = requestedSemester?.id || (options.keepSemester ? preferredSemesterId : activeSemester?.id) || preferredSemesterId
-      applySemesters(nextSemesters.length ? nextSemesters : semesters, semesterId)
-    } else if (semesterId !== currentSemesterId) {
-      currentSemesterId = semesterId
-      localStorage.setItem(SELECTED_SEMESTER_STORAGE_KEY, currentSemesterId)
-      initSemesters()
-    }
-
-    const classesData = await jsonpRequest('classes', { semesterId })
-    const studentsData = await jsonpRequest('students', { semesterId })
-    const attendanceData = await jsonpRequest('attendance', { semesterId })
-    const nextData = {
-      semesters: nextSemesters,
-      semesterId,
-      classes: classesData.classes || [],
-      students: studentsData.students || [],
-      attendance: attendanceData.records || attendanceData.attendance || []
-    }
+    const nextData = await fetchSemesterBootstrap(options)
 
     if (dataSignature(nextData) !== currentDataSignature()) {
       applyDataSet(nextData)
@@ -813,6 +787,58 @@ async function performApiSync(options = {}) {
     setSyncState('failed')
     if (options.throwOnError) throw error
     return { ok: false, error }
+  }
+}
+
+async function fetchSemesterBootstrap(options = {}) {
+  const preferredSemesterId = options.semesterId || currentSemesterId
+  try {
+    const data = await jsonpRequest('bootstrapSemester', { semesterId: preferredSemesterId })
+    if (data && data.ok === false) throw new Error(apiErrorMessage(data, 'API bootstrap failed'))
+    const nextSemesters = (data.semesters || semesters).map(normalizeSemester)
+    const requestedSemester = nextSemesters.find(item => item.id === preferredSemesterId)
+    const activeSemester = nextSemesters.find(item => item.status === 'active') || nextSemesters[0]
+    const semesterId = requestedSemester?.id || (options.keepSemester ? preferredSemesterId : activeSemester?.id) || data.semesterId || preferredSemesterId
+    return {
+      semesters: nextSemesters,
+      semesterId,
+      classes: data.classes || [],
+      students: data.students || [],
+      attendance: data.records || data.attendance || []
+    }
+  } catch (error) {
+    console.warn('bootstrapSemester failed, falling back to legacy sync:', error.message || error)
+    return fetchSemesterDataLegacy(options)
+  }
+}
+
+async function fetchSemesterDataLegacy(options = {}) {
+  const preferredSemesterId = options.semesterId || currentSemesterId
+  let nextSemesters = semesters
+  let semesterId = preferredSemesterId
+
+  if (options.includeSemesters) {
+    const semesterData = await jsonpRequest('semesters')
+    nextSemesters = (semesterData.semesters || []).map(normalizeSemester)
+    const requestedSemester = nextSemesters.find(item => item.id === preferredSemesterId)
+    const activeSemester = nextSemesters.find(item => item.status === 'active') || nextSemesters[0]
+    semesterId = requestedSemester?.id || (options.keepSemester ? preferredSemesterId : activeSemester?.id) || preferredSemesterId
+    applySemesters(nextSemesters.length ? nextSemesters : semesters, semesterId)
+  } else if (semesterId !== currentSemesterId) {
+    currentSemesterId = semesterId
+    localStorage.setItem(SELECTED_SEMESTER_STORAGE_KEY, currentSemesterId)
+    initSemesters()
+  }
+
+  const classesData = await jsonpRequest('classes', { semesterId })
+  const studentsData = await jsonpRequest('students', { semesterId })
+  const attendanceData = await jsonpRequest('attendance', { semesterId })
+  return {
+    semesters: nextSemesters,
+    semesterId,
+    classes: classesData.classes || [],
+    students: studentsData.students || [],
+    attendance: attendanceData.records || attendanceData.attendance || []
   }
 }
 
